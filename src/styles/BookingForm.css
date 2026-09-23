@@ -1,0 +1,190 @@
+/* -------------------------------------
+   Booking Form Main Container
+-------------------------------------- */
+.booking-form-container {
+  max-width: 480px;
+  margin: 40px auto;
+  padding: 24px 28px;
+  background: #ffffff;
+  border-radius: 16px;
+  box-shadow: 0 4px 14px rgba(0, 0, 0, 0.08);
+  font-family: "Inter", Arial, sans-serif;
+
+  /* ✨ Scrollable form */
+  max-height: 88vh;
+  overflow-y: auto;
+  scrollbar-width: thin;
+  scrollbar-color: #b4b4b4 transparent;
+}
+
+/* Chrome scrollbar */
+.booking-form-container::-webkit-scrollbar {
+  width: 6px;
+}
+.booking-form-container::-webkit-scrollbar-thumb {
+  background: #b4b4b4;
+  border-radius: 4px;
+}
+
+/* Title */
+.booking-title {
+  text-align: center;
+  font-size: 24px;
+  font-weight: 700;
+  margin-bottom: 20px;
+  color: #2b2b2b;
+}
+
+/* -------------------------------------
+   Form Groups
+-------------------------------------- */
+.form-group {
+  margin-bottom: 20px;
+  display: flex;
+  flex-direction: column;
+}
+
+.form-group label {
+  font-size: 14px;
+  font-weight: 600;
+  margin-bottom: 6px;
+  color: #333;
+}
+
+.form-group input,
+.form-group select,
+.form-group textarea {
+  padding: 12px 14px;
+  border: 1px solid #cccccc;
+  border-radius: 10px;
+  font-size: 14px;
+  outline: none;
+  transition: all 0.2s ease;
+  background: #fafafa;
+}
+
+.form-group input:focus,
+.form-group select:focus,
+.form-group textarea:focus {
+  border-color: #0066ff;
+  box-shadow: 0 0 5px rgba(0, 102, 255, 0.2);
+}
+
+/* -------------------------------------
+   Map Section
+-------------------------------------- */
+#map {
+  height: 260px;
+  border-radius: 12px;
+  border: 2px solid #e0e0e0;
+  margin-top: 12px;
+  overflow: hidden;
+}
+
+/* Coordinates Readonly Box */
+.coords {
+  display: flex;
+  flex-direction: column;
+  gap: 10px;
+  margin-top: 10px;
+}
+
+.coords input {
+  background: #f1f1f1;
+  cursor: not-allowed;
+  padding: 10px;
+  border-radius: 8px;
+  border: 1px solid #ccc;
+}
+
+/* -------------------------------------
+   Provider List Box
+-------------------------------------- */
+.provider-list-box {
+  background: #f7f9ff;
+  border: 1px solid #dce3ff;
+  padding: 14px;
+  border-radius: 12px;
+  margin-bottom: 16px;
+  max-height: 180px;
+  overflow-y: auto;
+}
+
+.provider-item {
+  padding: 10px 0;
+  border-bottom: 1px solid #e4e6fb;
+}
+
+.provider-item:last-child {
+  border-bottom: none;
+}
+
+.provider-item span {
+  font-size: 15px;
+  font-weight: 500;
+}
+
+/* View Profile Button */
+.view-profile-btn {
+  margin-top: 6px;
+  padding: 6px 10px;
+  background: #0066ff;
+  color: white;
+  border-radius: 6px;
+  font-size: 12px;
+  cursor: pointer;
+  border: none;
+  transition: 0.2s ease;
+}
+
+.view-profile-btn:hover {
+  background: #004fcc;
+}
+
+/* -------------------------------------
+   Submit Button
+-------------------------------------- */
+.submit-btn {
+  width: 100%;
+  padding: 14px;
+  font-size: 16px;
+  border: none;
+  background: #00c853;
+  color: white;
+  border-radius: 10px;
+  cursor: pointer;
+  font-weight: 600;
+  transition: 0.25s ease;
+}
+
+.submit-btn:hover {
+  background: #00a245;
+}
+
+.submit-btn:disabled {
+  background: #c5e8d0;
+  cursor: not-allowed;
+}
+
+/* -------------------------------------
+   Error / Success Alerts
+-------------------------------------- */
+.error-box {
+  background: #ffe6e6;
+  color: #cc0000;
+  border: 1px solid #ffb3b3;
+  padding: 12px 16px;
+  border-radius: 10px;
+  margin-bottom: 14px;
+  font-size: 14px;
+}
+
+.success-box {
+  background: #e6ffea;
+  color: #0b7d31;
+  border: 1px solid #b2f5c4;
+  padding: 12px 16px;
+  border-radius: 10px;
+  margin-bottom: 14px;
+  font-size: 14px;
+}

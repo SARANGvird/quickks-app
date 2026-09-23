@@ -1,0 +1,52 @@
+{
+  "name": "quickks-app",
+  "version": "0.1.0",
+  "private": true,
+  "scripts": {
+    "start": "react-scripts start",
+    "build": "react-scripts build",
+    "test": "react-scripts test",
+    "eject": "react-scripts eject"
+  },
+  "dependencies": {
+    "@emotion/react": "^11.11.4",
+    "@emotion/styled": "^11.11.5",
+    "@mui/icons-material": "^5.15.14",
+    "@mui/material": "^5.15.14",
+    "@stomp/stompjs": "^7.0.0",
+    "@tanstack/react-query": "^5.28.9",
+    "@tanstack/react-query-devtools": "^5.28.9",
+    "axios": "^1.6.8",
+    "date-fns": "^3.3.1",
+    "framer-motion": "^11.0.8",
+    "leaflet": "^1.9.4",
+    "lucide-react": "^0.363.0",
+    "qrcode.react": "^3.1.0",
+    "react": "^18.2.0",
+    "react-confetti": "^6.1.0",
+    "react-dom": "^18.2.0",
+    "react-error-boundary": "^4.0.11",
+    "react-helmet-async": "^2.0.4",
+    "react-hot-toast": "^2.4.1",
+    "react-icons": "^5.0.1",
+    "react-leaflet": "^4.2.1",
+    "react-router-dom": "^6.22.3",
+    "react-scripts": "^5.0.1",
+    "sockjs-client": "^1.6.1"
+  },
+  "devDependencies": {
+    "http-proxy-middleware": "^2.0.6"
+  },
+  "browserslist": {
+    "production": [
+      ">0.2%",
+      "not dead",
+      "not op_mini all"
+    ],
+    "development": [
+      "last 1 chrome version",
+      "last 1 firefox version",
+      "last 1 safari version"
+    ]
+  }
+}

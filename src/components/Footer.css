@@ -1,0 +1,695 @@
+/* src/components/Footer.css */
+
+/* ============================================
+   Footer Container Styles
+   ============================================ */
+.footer {
+  background: linear-gradient(135deg, #0f172a 0%, #1e293b 100%);
+  color: #e2e8f0;
+  padding: 3rem 2rem 1.5rem;
+  position: relative;
+  overflow: hidden;
+}
+
+.footer::before {
+  content: '';
+  position: absolute;
+  top: 0;
+  left: 0;
+  right: 0;
+  height: 4px;
+  background: linear-gradient(90deg, #fbbf24, #f59e0b, #fbbf24);
+  animation: shimmer 2s ease-in-out infinite;
+}
+
+/* ============================================
+   Container Layout
+   ============================================ */
+.footer-container {
+  max-width: 1280px;
+  margin: 0 auto;
+  display: grid;
+  grid-template-columns: repeat(auto-fit, minmax(250px, 1fr));
+  gap: 2rem;
+  position: relative;
+  z-index: 1;
+}
+
+/* ============================================
+   Footer Sections
+   ============================================ */
+.footer-section {
+  margin-bottom: 1.5rem;
+}
+
+.footer-title {
+  font-size: 1.25rem;
+  font-weight: 700;
+  margin-bottom: 1.25rem;
+  position: relative;
+  display: inline-block;
+  color: #fbbf24;
+}
+
+.footer-title::after {
+  content: '';
+  position: absolute;
+  bottom: -8px;
+  left: 0;
+  width: 40px;
+  height: 3px;
+  background: linear-gradient(90deg, #fbbf24, #f59e0b);
+  border-radius: 2px;
+  transition: width 0.3s ease;
+}
+
+.footer-section:hover .footer-title::after {
+  width: 80px;
+}
+
+/* ============================================
+   Navigation Links
+   ============================================ */
+.footer-nav {
+  list-style: none;
+  padding: 0;
+  margin: 0;
+}
+
+.footer-nav-item {
+  margin-bottom: 0.75rem;
+}
+
+.footer-nav-link {
+  color: #cbd5e1;
+  text-decoration: none;
+  transition: all 0.3s cubic-bezier(0.4, 0, 0.2, 1);
+  display: inline-flex;
+  align-items: center;
+  gap: 8px;
+  font-size: 0.9rem;
+  position: relative;
+  padding-left: 0;
+}
+
+.footer-nav-link::before {
+  content: '→';
+  opacity: 0;
+  transform: translateX(-10px);
+  transition: all 0.3s ease;
+  color: #fbbf24;
+}
+
+.footer-nav-link:hover {
+  color: #fbbf24 !important;
+  transform: translateX(8px);
+  padding-left: 4px;
+}
+
+.footer-nav-link:hover::before {
+  opacity: 1;
+  transform: translateX(0);
+}
+
+/* Active state for current page */
+.footer-nav-link.active {
+  color: #fbbf24 !important;
+  font-weight: 600;
+}
+
+.footer-nav-link.active::before {
+  opacity: 1;
+  transform: translateX(0);
+}
+
+/* ============================================
+   Social Media Icons
+   ============================================ */
+.footer-social {
+  display: flex;
+  gap: 1rem;
+  flex-wrap: wrap;
+  margin-top: 1rem;
+}
+
+.social-link {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  width: 40px;
+  height: 40px;
+  border-radius: 50%;
+  background-color: rgba(255, 255, 255, 0.1);
+  color: #cbd5e1;
+  transition: all 0.3s cubic-bezier(0.4, 0, 0.2, 1);
+  text-decoration: none;
+  position: relative;
+  overflow: hidden;
+}
+
+.social-link::before {
+  content: '';
+  position: absolute;
+  top: 50%;
+  left: 50%;
+  width: 0;
+  height: 0;
+  border-radius: 50%;
+  background-color: rgba(251, 191, 36, 0.3);
+  transform: translate(-50%, -50%);
+  transition: width 0.6s, height 0.6s;
+}
+
+.social-link:hover::before {
+  width: 100%;
+  height: 100%;
+}
+
+.social-link:hover {
+  background-color: #fbbf24 !important;
+  color: #0f172a !important;
+  transform: translateY(-4px) scale(1.1);
+  box-shadow: 0 8px 20px rgba(251, 191, 36, 0.3);
+}
+
+/* Social link variants */
+.social-link.facebook:hover {
+  background-color: #1877f2 !important;
+  box-shadow: 0 8px 20px rgba(24, 119, 242, 0.3);
+}
+
+.social-link.twitter:hover {
+  background-color: #1da1f2 !important;
+  box-shadow: 0 8px 20px rgba(29, 161, 242, 0.3);
+}
+
+.social-link.instagram:hover {
+  background: linear-gradient(135deg, #833ab4, #fd1d1d, #fcb045) !important;
+  box-shadow: 0 8px 20px rgba(131, 58, 180, 0.3);
+}
+
+.social-link.linkedin:hover {
+  background-color: #0077b5 !important;
+  box-shadow: 0 8px 20px rgba(0, 119, 181, 0.3);
+}
+
+/* ============================================
+   Contact Information
+   ============================================ */
+.footer-contact {
+  list-style: none;
+  padding: 0;
+  margin: 0;
+}
+
+.footer-contact-item {
+  display: flex;
+  align-items: center;
+  gap: 12px;
+  margin-bottom: 1rem;
+  font-size: 0.9rem;
+  color: #cbd5e1;
+  transition: transform 0.3s ease;
+}
+
+.footer-contact-item:hover {
+  transform: translateX(5px);
+  color: #fbbf24;
+}
+
+.footer-contact-icon {
+  width: 24px;
+  height: 24px;
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  color: #fbbf24;
+}
+
+/* ============================================
+   Newsletter Section
+   ============================================ */
+.footer-newsletter {
+  margin-top: 1rem;
+}
+
+.newsletter-form {
+  display: flex;
+  gap: 0.5rem;
+  margin-top: 1rem;
+  flex-wrap: wrap;
+}
+
+.newsletter-input {
+  flex: 1;
+  padding: 0.75rem 1rem;
+  border: 2px solid rgba(255, 255, 255, 0.1);
+  border-radius: 8px;
+  background-color: rgba(255, 255, 255, 0.05);
+  color: #fff;
+  font-size: 0.9rem;
+  transition: all 0.3s ease;
+  outline: none;
+}
+
+.newsletter-input:focus {
+  border-color: #fbbf24;
+  background-color: rgba(255, 255, 255, 0.1);
+  box-shadow: 0 0 0 3px rgba(251, 191, 36, 0.1);
+}
+
+.newsletter-input::placeholder {
+  color: #94a3b8;
+}
+
+.newsletter-button {
+  padding: 0.75rem 1.5rem;
+  background: linear-gradient(135deg, #fbbf24, #f59e0b);
+  border: none;
+  border-radius: 8px;
+  color: #0f172a;
+  font-weight: 600;
+  cursor: pointer;
+  transition: all 0.3s ease;
+  display: inline-flex;
+  align-items: center;
+  gap: 8px;
+}
+
+.newsletter-button:hover {
+  transform: translateY(-2px);
+  box-shadow: 0 4px 12px rgba(251, 191, 36, 0.4);
+}
+
+.newsletter-button:active {
+  transform: translateY(0);
+}
+
+/* ============================================
+   Footer Bottom Bar
+   ============================================ */
+.footer-bottom {
+  margin-top: 3rem;
+  padding-top: 1.5rem;
+  border-top: 1px solid rgba(255, 255, 255, 0.1);
+  text-align: center;
+  font-size: 0.875rem;
+  color: #94a3b8;
+}
+
+.footer-bottom-links {
+  display: flex;
+  justify-content: center;
+  gap: 2rem;
+  flex-wrap: wrap;
+  margin-bottom: 1rem;
+}
+
+.footer-bottom-link {
+  color: #94a3b8;
+  text-decoration: none;
+  transition: color 0.3s ease;
+}
+
+.footer-bottom-link:hover {
+  color: #fbbf24;
+}
+
+/* ============================================
+   Payment Methods Section
+   ============================================ */
+.payment-methods {
+  display: flex;
+  gap: 1rem;
+  justify-content: center;
+  margin: 1rem 0;
+  flex-wrap: wrap;
+}
+
+.payment-icon {
+  font-size: 2rem;
+  opacity: 0.7;
+  transition: all 0.3s ease;
+  filter: grayscale(0.3);
+}
+
+.payment-icon:hover {
+  opacity: 1;
+  transform: scale(1.1);
+  filter: grayscale(0);
+}
+
+/* ============================================
+   Back to Top Button
+   ============================================ */
+.back-to-top {
+  position: fixed;
+  bottom: 2rem;
+  right: 2rem;
+  width: 48px;
+  height: 48px;
+  border-radius: 50%;
+  background: linear-gradient(135deg, #fbbf24, #f59e0b);
+  border: none;
+  color: #0f172a;
+  cursor: pointer;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  transition: all 0.3s cubic-bezier(0.4, 0, 0.2, 1);
+  opacity: 0;
+  visibility: hidden;
+  z-index: 1000;
+  box-shadow: 0 4px 12px rgba(0, 0, 0, 0.2);
+}
+
+.back-to-top.visible {
+  opacity: 1;
+  visibility: visible;
+}
+
+.back-to-top:hover {
+  transform: translateY(-5px) scale(1.1);
+  box-shadow: 0 8px 20px rgba(251, 191, 36, 0.4);
+}
+
+/* ============================================
+   Animations
+   ============================================ */
+@keyframes shimmer {
+  0%, 100% {
+    opacity: 1;
+  }
+  50% {
+    opacity: 0.7;
+  }
+}
+
+@keyframes fadeInUp {
+  from {
+    opacity: 0;
+    transform: translateY(20px);
+  }
+  to {
+    opacity: 1;
+    transform: translateY(0);
+  }
+}
+
+@keyframes pulse {
+  0%, 100% {
+    transform: scale(1);
+  }
+  50% {
+    transform: scale(1.05);
+  }
+}
+
+/* Fade-in animation for footer sections */
+.footer-section {
+  animation: fadeInUp 0.6s ease-out;
+  animation-fill-mode: backwards;
+}
+
+.footer-section:nth-child(1) { animation-delay: 0.1s; }
+.footer-section:nth-child(2) { animation-delay: 0.2s; }
+.footer-section:nth-child(3) { animation-delay: 0.3s; }
+.footer-section:nth-child(4) { animation-delay: 0.4s; }
+
+/* ============================================
+   Responsive Design
+   ============================================ */
+@media (max-width: 1024px) {
+  .footer-container {
+    grid-template-columns: repeat(2, 1fr);
+    gap: 1.5rem;
+  }
+}
+
+@media (max-width: 768px) {
+  .footer {
+    padding: 2rem 1.5rem 1rem;
+  }
+  
+  .footer-container {
+    grid-template-columns: 1fr;
+    gap: 2rem;
+  }
+  
+  .footer-title {
+    font-size: 1.1rem;
+  }
+  
+  .footer-nav-link {
+    font-size: 0.85rem;
+  }
+  
+  .newsletter-form {
+    flex-direction: column;
+  }
+  
+  .newsletter-button {
+    width: 100%;
+    justify-content: center;
+  }
+  
+  .footer-bottom-links {
+    gap: 1rem;
+  }
+  
+  .back-to-top {
+    bottom: 1rem;
+    right: 1rem;
+    width: 40px;
+    height: 40px;
+  }
+}
+
+@media (max-width: 480px) {
+  .footer {
+    padding: 1.5rem 1rem 1rem;
+  }
+  
+  .footer-bottom-links {
+    flex-direction: column;
+    gap: 0.5rem;
+  }
+  
+  .social-link {
+    width: 36px;
+    height: 36px;
+  }
+  
+  .footer-contact-item {
+    font-size: 0.8rem;
+  }
+}
+
+/* ============================================
+   Dark Mode Support
+   ============================================ */
+@media (prefers-color-scheme: dark) {
+  .footer {
+    background: linear-gradient(135deg, #020617, #0f172a);
+  }
+  
+  .footer-nav-link {
+    color: #94a3b8;
+  }
+  
+  .footer-contact-item {
+    color: #94a3b8;
+  }
+}
+
+/* ============================================
+   Print Styles
+   ============================================ */
+@media print {
+  .footer {
+    background: #fff;
+    color: #000;
+    padding: 1rem;
+  }
+  
+  .footer-nav-link,
+  .footer-contact-item {
+    color: #000 !important;
+  }
+  
+  .footer-nav-link:hover {
+    transform: none;
+  }
+  
+  .social-link,
+  .newsletter-form,
+  .back-to-top {
+    display: none;
+  }
+  
+  .footer-title::after {
+    background: #000;
+  }
+}
+
+/* ============================================
+   Accessibility
+   ============================================ */
+@media (prefers-reduced-motion: reduce) {
+  *,
+  *::before,
+  *::after {
+    animation-duration: 0.01ms !important;
+    animation-iteration-count: 1 !important;
+    transition-duration: 0.01ms !important;
+  }
+}
+
+/* Focus styles for keyboard navigation */
+.footer-nav-link:focus-visible,
+.social-link:focus-visible,
+.newsletter-button:focus-visible,
+.back-to-top:focus-visible {
+  outline: 2px solid #fbbf24;
+  outline-offset: 2px;
+  border-radius: 4px;
+}
+
+/* High contrast mode support */
+@media (forced-colors: active) {
+  .footer-nav-link:hover {
+    forced-color-adjust: none;
+    color: Highlight !important;
+  }
+  
+  .social-link:hover {
+    forced-color-adjust: none;
+    background-color: Highlight !important;
+  }
+}
+
+/* ============================================
+   Loading States
+   ============================================ */
+.newsletter-button.loading {
+  position: relative;
+  pointer-events: none;
+  opacity: 0.7;
+}
+
+.newsletter-button.loading::after {
+  content: '';
+  position: absolute;
+  width: 16px;
+  height: 16px;
+  border: 2px solid transparent;
+  border-top-color: currentColor;
+  border-radius: 50%;
+  animation: spin 0.6s linear infinite;
+}
+
+@keyframes spin {
+  to {
+    transform: rotate(360deg);
+  }
+}
+
+/* ============================================
+   Success/Error States
+   ============================================ */
+.newsletter-success {
+  color: #10b981;
+  font-size: 0.875rem;
+  margin-top: 0.5rem;
+  animation: fadeInUp 0.3s ease;
+}
+
+.newsletter-error {
+  color: #ef4444;
+  font-size: 0.875rem;
+  margin-top: 0.5rem;
+  animation: fadeInUp 0.3s ease;
+}
+
+/* ============================================
+   Scroll Animations
+   ============================================ */
+.footer-section {
+  opacity: 0;
+  transform: translateY(20px);
+  transition: all 0.6s ease;
+}
+
+.footer-section.animate-in {
+  opacity: 1;
+  transform: translateY(0);
+}
+
+/* ============================================
+   Gradient Border Effects
+   ============================================ */
+.footer-section {
+  position: relative;
+}
+
+.footer-section::after {
+  content: '';
+  position: absolute;
+  bottom: -1rem;
+  left: 0;
+  width: 0;
+  height: 2px;
+  background: linear-gradient(90deg, #fbbf24, transparent);
+  transition: width 0.3s ease;
+}
+
+.footer-section:hover::after {
+  width: 100%;
+}
+
+/* ============================================
+   Tooltip Styles
+   ============================================ */
+.social-link {
+  position: relative;
+}
+
+.social-link::after {
+  content: attr(data-tooltip);
+  position: absolute;
+  bottom: 100%;
+  left: 50%;
+  transform: translateX(-50%);
+  padding: 4px 8px;
+  background-color: #1e293b;
+  color: #fbbf24;
+  font-size: 0.75rem;
+  border-radius: 4px;
+  white-space: nowrap;
+  opacity: 0;
+  visibility: hidden;
+  transition: all 0.3s ease;
+  pointer-events: none;
+  margin-bottom: 8px;
+}
+
+.social-link:hover::after {
+  opacity: 1;
+  visibility: visible;
+}
+
+/* ============================================
+   Responsive Table for Legal Links
+   ============================================ */
+@media (max-width: 640px) {
+  .footer-bottom-links {
+    flex-direction: column;
+    align-items: center;
+    gap: 0.75rem;
+  }
+  
+  .footer-bottom-link {
+    display: inline-block;
+    padding: 0.25rem 0;
+  }
+}

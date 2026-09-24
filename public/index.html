@@ -1,525 +1,84 @@
 <!DOCTYPE html>
 <html lang="en">
   <head>
-    <!-- ========================================================== -->
-    <!-- BASIC META TAGS -->
-    <!-- ========================================================== -->
     <meta charset="utf-8" />
     <meta name="viewport" content="width=device-width, initial-scale=1, maximum-scale=5" />
     <meta name="theme-color" content="#0f172a" />
-    <meta name="robots" content="index, follow" />
-    <meta name="googlebot" content="index, follow" />
+    <meta name="robots" content="index, follow, max-snippet:-1, max-image-preview:large" />
     
-    <!-- ========================================================== -->
-    <!-- FAVICON & APPLE TOUCH ICON -->
-    <!-- ========================================================== -->
     <link rel="icon" href="%PUBLIC_URL%/favicon.ico" />
     <link rel="apple-touch-icon" href="%PUBLIC_URL%/logo192.png" />
     <link rel="manifest" href="%PUBLIC_URL%/manifest.json" />
     
-    <!-- ========================================================== -->
-    <!-- PRIMARY META TAGS - SEO -->
-    <!-- ========================================================== -->
-    <!-- ✅ Only ONE title tag -->
     <title>Quickks - Trusted Home Services Platform | Electrician, Repair & More</title>
-    <meta 
-      name="description" 
-      content="Quickks is India's trusted home services platform. Book verified electricians, appliance repair experts, and home service professionals near you in minutes. 24/7 support, secure payments, 100% satisfaction guaranteed." 
-    />
-    <meta 
-      name="keywords" 
-      content="home services, electrician, appliance repair, home repair, trusted professionals, Quickks, service platform, verified providers, 24/7 support" 
-    />
+    <meta name="description" content="Quickks is India's trusted home services platform. Book verified electricians, appliance repair experts, and home service professionals near you in minutes. 24/7 support, secure payments, 100% satisfaction guaranteed." />
+    <meta name="keywords" content="home services, electrician, appliance repair, home repair, trusted professionals, Quickks" />
     
-    <!-- ========================================================== -->
-    <!-- OPEN GRAPH META TAGS - SOCIAL MEDIA -->
-    <!-- ========================================================== -->
+    <!-- Open Graph -->
     <meta property="og:title" content="Quickks - Trusted Home Services Platform" />
-    <meta 
-      property="og:description" 
-      content="Find trusted electricians, repair experts, and home service professionals near you. Book verified professionals in minutes. 24/7 support, secure payments." 
-    />
+    <meta property="og:description" content="Find trusted electricians, repair experts, and home service professionals near you." />
     <meta property="og:type" content="website" />
     <meta property="og:url" content="https://quickks.com" />
     <meta property="og:image" content="%PUBLIC_URL%/og-image.jpg" />
     <meta property="og:site_name" content="Quickks" />
-    <meta property="og:locale" content="en_IN" />
-    
-    <!-- ========================================================== -->
-    <!-- TWITTER CARD META TAGS -->
-    <!-- ========================================================== -->
+
     <meta name="twitter:card" content="summary_large_image" />
     <meta name="twitter:title" content="Quickks - Trusted Home Services Platform" />
-    <meta 
-      name="twitter:description" 
-      content="Find trusted electricians, repair experts, and home service professionals near you." 
-    />
-    <meta name="twitter:image" content="%PUBLIC_URL%/twitter-card.jpg" />
-    
-    <!-- ========================================================== -->
-    <!-- GEO META TAGS -->
-    <!-- ========================================================== -->
-    <meta name="geo.region" content="IN" />
-    <meta name="geo.placename" content="India" />
-    
-    <!-- ========================================================== -->
-    <!-- PRELOAD CRITICAL RESOURCES -->
-    <!-- ========================================================== -->
+    <meta name="twitter:description" content="Find trusted electricians, repair experts near you." />
+    <meta name="twitter:image" content="%PUBLIC_URL%/og-image.jpg" />
+
+    <!-- Performance: preconnect only to critical -->
     <link rel="preconnect" href="https://fonts.googleapis.com" />
     <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin />
-    <link 
-      rel="preload" 
-      href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700;800;900&display=swap" 
-      as="style" 
-    />
-    <link 
-      href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700;800;900&display=swap" 
-      rel="stylesheet" 
-    />
-    
-    <!-- ========================================================== -->
-    <!-- RAZORPAY - Loaded asynchronously with error handling -->
-    <!-- ========================================================== -->
+    <link href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700;800;900&display=swap" rel="stylesheet" />
+
+    <!-- Razorpay: DO NOT load globally. We will load on-demand -->
     <script>
-      // ✅ Razorpay error handler - MUST be before loading Razorpay
-      (function() {
-        // Store original error handlers
-        var originalOnError = window.onerror;
-        var originalUnhandledRejection = window.onunhandledrejection;
-        
-        // ✅ Global error handler for Razorpay
-        window.onerror = function(message, source, lineno, colno, error) {
-          if (message && typeof message === 'string' && (
-            message.includes('backends') ||
-            message.includes('undefined') ||
-            message.includes('t.backends') ||
-            message.includes('Razorpay') ||
-            message.includes('razorpay')
-          )) {
-            console.warn('⚠️ Razorpay script error caught and suppressed:', message);
-            return true; // ✅ Prevent default error handling
-          }
-          
-          // ✅ Pass through other errors
-          if (originalOnError) {
-            return originalOnError(message, source, lineno, colno, error);
-          }
-          return false;
-        };
-        
-        // ✅ Catch unhandled promise rejections
-        window.addEventListener('unhandledrejection', function(e) {
-          var reason = e.reason;
-          var message = reason && reason.message ? reason.message : String(reason || '');
-          
-          if (message.includes('backends') || 
-              message.includes('undefined') || 
-              message.includes('Razorpay') ||
-              message.includes('razorpay')) {
-            console.warn('⚠️ Razorpay promise rejection caught:', message);
-            e.preventDefault();
-            return true;
-          }
-          
-          if (originalUnhandledRejection) {
-            return originalUnhandledRejection(e);
-          }
+      // Lazy loader - call window.loadRazorpay() only on checkout page
+      window.loadRazorpay = function() {
+        return new Promise(function(resolve, reject) {
+          if (window.Razorpay) return resolve(window.Razorpay);
+          var script = document.createElement('script');
+          script.src = 'https://checkout.razorpay.com/v1/checkout.js';
+          script.onload = () => resolve(window.Razorpay);
+          script.onerror = () => reject(new Error('Razorpay failed to load'));
+          document.head.appendChild(script);
         });
-        
-        // ✅ Lazy load Razorpay function
-        window.loadRazorpay = function() {
-          return new Promise(function(resolve, reject) {
-            if (window.Razorpay) {
-              resolve(window.Razorpay);
-              return;
-            }
-            
-            var existingScript = document.querySelector('script[src*="razorpay"]');
-            if (existingScript) {
-              var checkLoaded = setInterval(function() {
-                if (window.Razorpay) {
-                  clearInterval(checkLoaded);
-                  resolve(window.Razorpay);
-                }
-              }, 100);
-              
-              setTimeout(function() {
-                clearInterval(checkLoaded);
-                reject(new Error('Razorpay load timeout'));
-              }, 10000);
-              return;
-            }
-            
-            var script = document.createElement('script');
-            script.src = 'https://checkout.razorpay.com/v1/checkout.js';
-            script.async = true;
-            script.onload = function() {
-              if (window.Razorpay) {
-                resolve(window.Razorpay);
-              } else {
-                reject(new Error('Razorpay failed to load'));
-              }
-            };
-            script.onerror = function() {
-              reject(new Error('Razorpay script failed to load'));
-            };
-            document.head.appendChild(script);
-          });
-        };
-      })();
+      };
     </script>
+
+    <link rel="canonical" href="https://quickks.com" />
     
-    <!-- ✅ Razorpay script loaded with async/defer -->
-    <script 
-      src="https://checkout.razorpay.com/v1/checkout.js" 
-      async 
-      defer 
-      crossorigin="anonymous"
-    ></script>
-    
-    <!-- ========================================================== -->
-    <!-- STRUCTURED DATA (JSON-LD) - SEO -->
-    <!-- ========================================================== -->
     <script type="application/ld+json">
       {
         "@context": "https://schema.org",
         "@type": "LocalBusiness",
         "name": "Quickks",
-        "description": "Trusted home services platform connecting customers with verified professionals",
         "url": "https://quickks.com",
-        "logo": "https://quickks.com/logo.png",
-        "image": "https://quickks.com/og-image.jpg",
-        "telephone": "+91-98765-43210",
-        "email": "support@quickks.com",
-        "address": {
-          "@type": "PostalAddress",
-          "addressCountry": "IN"
-        },
-        "openingHours": "Mo-Su 00:00-23:59",
+        "description": "Trusted home services platform connecting customers with verified professionals",
         "priceRange": "₹₹",
-        "sameAs": [
-          "https://facebook.com/quickks",
-          "https://twitter.com/quickks",
-          "https://instagram.com/quickks",
-          "https://linkedin.com/company/quickks"
-        ],
-        "aggregateRating": {
-          "@type": "AggregateRating",
-          "ratingValue": "4.8",
-          "reviewCount": "1250",
-          "bestRating": "5",
-          "worstRating": "1"
-        },
-        "offers": {
-          "@type": "Offer",
-          "description": "Professional home services at competitive prices",
-          "priceSpecification": {
-            "@type": "PriceSpecification",
-            "priceCurrency": "INR",
-            "price": "399"
-          }
-        },
-        "serviceArea": {
-          "@type": "Place",
-          "address": {
-            "@type": "PostalAddress",
-            "addressCountry": "IN"
-          }
-        }
+        "openingHours": "Mo-Su 00:00-23:59"
       }
     </script>
-    
-    <!-- ========================================================== -->
-    <!-- BROWSER THEME COLOR -->
-    <!-- ========================================================== -->
-    <meta name="theme-color" content="#0f172a" />
-    <meta name="apple-mobile-web-app-capable" content="yes" />
-    <meta name="apple-mobile-web-app-status-bar-style" content="black-translucent" />
-    
-    <!-- ========================================================== -->
-    <!-- SECURITY HEADERS (via meta) -->
-    <!-- ========================================================== -->
-    <meta http-equiv="X-UA-Compatible" content="IE=edge" />
-    <meta name="referrer" content="strict-origin-when-cross-origin" />
-    
-    <!-- ========================================================== -->
-    <!-- CANONICAL URL -->
-    <!-- ========================================================== -->
-    <link rel="canonical" href="https://quickks.com" />
-    
-    <!-- ========================================================== -->
-    <!-- ALTERNATE LANGUAGE VERSIONS -->
-    <!-- ========================================================== -->
-    <link rel="alternate" hreflang="en" href="https://quickks.com" />
-    <link rel="alternate" hreflang="hi" href="https://quickks.com/hi" />
-    
-    <!-- ========================================================== -->
-    <!-- ROBOTS -->
-    <!-- ========================================================== -->
-    <meta name="robots" content="index, follow, max-snippet:-1, max-image-preview:large" />
-    
-    <!-- ========================================================== -->
-    <!-- FAVICON FORMATS -->
-    <!-- ========================================================== -->
-    <link rel="icon" type="image/png" sizes="32x32" href="%PUBLIC_URL%/favicon-32x32.png" />
-    <link rel="icon" type="image/png" sizes="16x16" href="%PUBLIC_URL%/favicon-16x16.png" />
-    <link rel="shortcut icon" href="%PUBLIC_URL%/favicon.ico" />
   </head>
   <body>
-    <!-- ========================================================== -->
-    <!-- NOSCRIPT FALLBACK -->
-    <!-- ========================================================== -->
     <noscript>
-      <div style="
-        display: flex;
-        justify-content: center;
-        align-items: center;
-        height: 100vh;
-        background: #0f172a;
-        color: white;
-        font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, 'Helvetica Neue', Arial, sans-serif;
-        flex-direction: column;
-        padding: 20px;
-        text-align: center;
-      ">
-        <h1 style="color: #fbbf24; font-size: 2.5rem; margin-bottom: 16px;">⚡ Quickks</h1>
-        <p style="font-size: 1.1rem; color: #94a3b8; max-width: 500px; line-height: 1.6;">
-          Please enable JavaScript to use the Quickks platform.
-        </p>
-        <p style="font-size: 0.9rem; color: #64748b; margin-top: 12px;">
-          We're sorry, but Quickks requires JavaScript to function properly.
-        </p>
-        <div style="margin-top: 24px;">
-          <a 
-            href="https://www.enable-javascript.com/" 
-            target="_blank" 
-            rel="noopener noreferrer"
-            style="
-              color: #fbbf24;
-              text-decoration: underline;
-              font-weight: 500;
-            "
-          >
-            Learn how to enable JavaScript
-          </a>
-        </div>
+      <div style="display:flex;justify-content:center;align-items:center;height:100vh;background:#0f172a;color:white;font-family:sans-serif;flex-direction:column;padding:20px;text-align:center;">
+        <h1 style="color:#fbbf24;font-size:2.5rem;">⚡ Quickks</h1>
+        <p>Please enable JavaScript to use Quickks platform.</p>
       </div>
     </noscript>
-
-    <!-- ========================================================== -->
-    <!-- ROOT ELEMENT -->
-    <!-- ========================================================== -->
     <div id="root"></div>
 
-    <!-- ========================================================== -->
-    <!-- ✅ FIXED: PERFORMANCE MONITORING -->
-    <!-- ========================================================== -->
+    <!-- REMOVE service worker for now - CRA doesn't need it unless you have PWA setup -->
     <script>
-      // ✅ Suppress Razorpay preload warnings (MUST be first)
-      (function suppressRazorpayWarnings() {
-        // ✅ Override console.warn
-        var originalWarn = console.warn;
-        console.warn = function() {
-          var args = Array.from(arguments);
-          var msg = args[0] || '';
-          if (typeof msg === 'string' && (
-            msg.includes('preloaded with link preload') ||
-            msg.includes('checkout-static-next.razorpay.com') ||
-            msg.includes('build/undefined') ||
-            msg.includes('preload tag are set correctly') ||
-            msg.includes('Razorpay')
-          )) {
-            // ✅ Suppress Razorpay preload warnings
-            return;
-          }
-          // ✅ Pass through other warnings
-          originalWarn.apply(console, args);
-        };
-        
-        // ✅ Override console.error for Razorpay
-        var originalError = console.error;
-        console.error = function() {
-          var args = Array.from(arguments);
-          var msg = args[0] || '';
-          if (typeof msg === 'string' && (
-            msg.includes('preload') ||
-            msg.includes('razorpay') ||
-            msg.includes('Razorpay') ||
-            msg.includes('build/undefined')
-          ) && !msg.includes('Failed to load')) {
-            // ✅ Suppress Razorpay errors
-            return;
-          }
-          // ✅ Pass through other errors
-          originalError.apply(console, args);
-        };
-      })();
-
-      // ✅ Web Vitals reporting
-      if ('performance' in window && 'PerformanceObserver' in window) {
-        try {
-          var observer = new PerformanceObserver(function(list) {
-            list.getEntries().forEach(function(entry) {
-              if (entry.entryType === 'largest-contentful-paint') {
-                console.log('LCP:', entry.startTime);
-              }
-              if (entry.entryType === 'first-input') {
-                console.log('FID:', entry.processingStart - entry.startTime);
-              }
-              if (entry.entryType === 'layout-shift') {
-                console.log('CLS:', entry.value);
-              }
-            });
-          });
-          observer.observe({ type: 'largest-contentful-paint', buffered: true });
-          observer.observe({ type: 'first-input', buffered: true });
-          observer.observe({ type: 'layout-shift', buffered: true });
-        } catch (e) {
-          // Silently fail
-        }
-      }
-
-      // ✅ Service Worker with error handling
       if ('serviceWorker' in navigator) {
-        window.addEventListener('load', function() {
-          navigator.serviceWorker.register('/sw.js').catch(function(error) {
-            // ✅ Silent fail - service worker is optional
-            console.log('Service worker registration skipped:', error.message);
-          });
+        navigator.serviceWorker.getRegistrations().then(function(registrations) {
+          for(var registration of registrations) {
+            registration.unregister();
+          }
         });
       }
-
-      // ✅ Handle online/offline status
-      window.addEventListener('online', function() {
-        console.log('🟢 App is online');
-        document.dispatchEvent(new CustomEvent('app:online'));
-      });
-      
-      window.addEventListener('offline', function() {
-        console.log('🔴 App is offline');
-        document.dispatchEvent(new CustomEvent('app:offline'));
-      });
-
-      // ✅ Mark first paint for performance tracking
-      if (window.performance && window.performance.mark) {
-        window.performance.mark('html_loaded');
-      }
     </script>
-
-    <!-- ========================================================== -->
-    <!-- ENVIRONMENT VARIABLES -->
-    <!-- ========================================================== -->
-    <script>
-      // ✅ Environment configuration with fallbacks
-      window.__ENV = {
-        API_URL: '%REACT_APP_API_URL%' || 'http://localhost:8081',
-        CONTEXT_PATH: '%REACT_APP_CONTEXT_PATH%' || '/quickks',
-        WS_URL: '%REACT_APP_WS_URL%' || 'http://localhost:8081',
-        RAZORPAY_KEY: '%REACT_APP_RAZORPAY_KEY_ID%' || '',
-        VERSION: '%REACT_APP_VERSION%' || '1.0.0',
-        ENVIRONMENT: '%REACT_APP_ENV%' || 'development',
-        SENTRY_DSN: '%REACT_APP_SENTRY_DSN%' || '',
-        GA_TRACKING_ID: '%REACT_APP_GA_TRACKING_ID%' || '',
-        ENABLE_WEBSOCKET: '%REACT_APP_ENABLE_WEBSOCKET%' || 'true',
-        ENABLE_ANALYTICS: '%REACT_APP_ENABLE_ANALYTICS%' || 'true',
-      };
-
-      // ✅ Validate environment in production
-      if (window.__ENV.ENVIRONMENT === 'production') {
-        if (!window.__ENV.API_URL || window.__ENV.API_URL === 'http://localhost:8081') {
-          console.warn('⚠️ API_URL not configured for production');
-        }
-      }
-
-      // ✅ Log environment in development
-      if (window.__ENV.ENVIRONMENT === 'development') {
-        console.log('🔧 Environment:', window.__ENV);
-      }
-    </script>
-
-    <!-- ========================================================== -->
-    <!-- ✅ FIXED: GLOBAL ERROR HANDLING -->
-    <!-- ========================================================== -->
-    <script>
-      // ✅ Global error handler with Razorpay filtering
-      window.addEventListener('error', function(event) {
-        var message = event.message || '';
-        var filename = event.filename || '';
-        
-        // ✅ Skip Razorpay preload errors
-        if (message && (
-          message.includes('preload') || 
-          message.includes('razorpay') ||
-          message.includes('Razorpay') ||
-          message.includes('backends') ||
-          message.includes('build/undefined')
-        )) {
-          event.preventDefault();
-          return;
-        }
-        
-        // ✅ Log other errors
-        console.error('Global Error:', {
-          message: message,
-          filename: filename,
-          lineno: event.lineno,
-          colno: event.colno,
-          stack: event.error?.stack
-        });
-      }, true);
-
-      // ✅ Unhandled promise rejection handler
-      window.addEventListener('unhandledrejection', function(event) {
-        var reason = event.reason;
-        var message = reason && reason.message ? reason.message : String(reason || '');
-        
-        // ✅ Skip Razorpay errors
-        if (message.includes('preload') || 
-            message.includes('razorpay') || 
-            message.includes('Razorpay') ||
-            message.includes('backends') ||
-            message.includes('build/undefined')) {
-          event.preventDefault();
-          return;
-        }
-        
-        console.error('Unhandled Promise Rejection:', reason);
-      });
-    </script>
-
-    <!-- ========================================================== -->
-    <!-- THIRD-PARTY INTEGRATIONS -->
-    <!-- ========================================================== -->
-    
-    <!-- Google Analytics (if used) -->
-    <!--
-    <script async src="https://www.googletagmanager.com/gtag/js?id=G-XXXXXXXXXX"></script>
-    <script>
-      window.dataLayer = window.dataLayer || [];
-      function gtag(){dataLayer.push(arguments);}
-      gtag('js', new Date());
-      gtag('config', 'G-XXXXXXXXXX');
-    </script>
-    -->
-
-    <!-- Facebook Pixel (if used) -->
-    <!--
-    <script>
-      !function(f,b,e,v,n,t,s)
-      {if(f.fbq)return;n=f.fbq=function(){n.callMethod?
-      n.callMethod.apply(n,arguments):n.queue.push(arguments)};
-      if(!f._fbq)f._fbq=n;n.push=n;n.loaded=!0;n.version='2.0';
-      n.queue=[];t=b.createElement(e);t.async=!0;
-      t.src=v;s=b.getElementsByTagName(e)[0];
-      s.parentNode.insertBefore(t,s)}(window, document,'script',
-      'https://connect.facebook.net/en_US/fbevents.js');
-      fbq('init', 'XXXXXXXXXXXXXXX');
-      fbq('track', 'PageView');
-    </script>
-    <noscript>
-      <img height="1" width="1" style="display:none" 
-        src="https://www.facebook.com/tr?id=XXXXXXXXXXXXXXX&ev=PageView&noscript=1" />
-    </noscript>
-    -->
   </body>
 </html>

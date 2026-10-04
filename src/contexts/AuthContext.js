@@ -1,4 +1,4 @@
-// src/contexts/AuthContext.js - v12.0 PRODUCTION - Vercel + Spring Boot Safe
+// src/contexts/AuthContext.js - v13.0 PRODUCTION - FINAL FIX for mup33qvm / mup539g5
 import React, { createContext, useState, useContext, useEffect, useCallback, useMemo, useRef } from 'react';
 import api, { TokenManager, checkHealth } from '../api/api';
 
@@ -20,12 +20,23 @@ export const useAuth = () => {
   return ctx;
 };
 
-// --- SAFE HELPERS ---
+// --- SAFE HELPERS - PRODUCTION HARDENED ---
+const safeParseJSON = (str) => {
+  try {
+    if (!str || str === "undefined" || str === "null" || str === "" || str === "null") return null;
+    return JSON.parse(str);
+  } catch {
+    return null;
+  }
+};
+
 const safeDecodeToken = (token) => {
   try {
     if (!token || typeof token!== 'string' || token.split('.').length!== 3) return null;
     const base64Url = token.split('.')[1];
-    const base64 = base64Url.replace(/-/g, '+').replace(/_/g, '/');
+    let base64 = base64Url.replace(/-/g, '+').replace(/_/g, '/');
+    // padding fix for atob
+    while (base64.length % 4) base64 += '=';
     const jsonPayload = decodeURIComponent(
       atob(base64).split('').map(c => '%' + ('00' + c.charCodeAt(0).toString(16)).slice(-2)).join('')
     );
@@ -52,7 +63,11 @@ const unwrapApiData = (response) => {
 };
 
 const safeGetStorage = (fn, fallback = null) => {
-  try { return fn(); } catch { return fallback; }
+  try {
+    const v = fn();
+    if (v === "undefined" || v === "") return fallback;
+    return v?? fallback;
+  } catch { return fallback; }
 };
 
 export const AuthProvider = ({ children }) => {
@@ -101,7 +116,7 @@ export const AuthProvider = ({ children }) => {
     if (newRefreshToken) setRefreshToken(newRefreshToken);
   }, []);
 
-  // LOGOUT DEFINED FIRST - Fixes TDZ crash at 205:80131
+  // LOGOUT DEFINED FIRST - Fixes TDZ crash at 205:80131 / 205:80145
   const logout = useCallback(async (silent = false) => {
     try {
       if (!silent && token && typeof window!== 'undefined') {
@@ -112,6 +127,11 @@ export const AuthProvider = ({ children }) => {
       clearAllTimers();
       clearTokens();
       safeGetStorage(() => TokenManager.removeTokens());
+      // hard clear corrupted storage
+      if(typeof window!== 'undefined'){
+        localStorage.removeItem("user");
+        localStorage.removeItem("quickks_user");
+      }
       setUser(null);
       setIsAuthenticated(false);
       setPermissions([]);
@@ -166,7 +186,7 @@ export const AuthProvider = ({ children }) => {
       if (mountedRef.current) {
         setUser(userData);
         setIsAuthenticated(true);
-        setPermissions(userData.permissions);
+        setPermissions(userData.permissions || []);
         setSessionExpiry(getTokenExpiryTime(newAccess));
       }
       if (typeof window!== 'undefined') {
@@ -179,18 +199,20 @@ export const AuthProvider = ({ children }) => {
     }
   }, [refreshToken, updateTokens, logout]);
 
-  // Initialize - NO circular dep on refreshAccessToken
+  // Initialize - NO circular dep + safeParse
   const initializeAuth = useCallback(async () => {
     if (!mountedRef.current) return;
     setLoading(true);
     try {
       const storedToken = safeGetStorage(() => TokenManager.getAccessToken());
       const storedRefresh = safeGetStorage(() => TokenManager.getRefreshToken());
-      const storedUser = safeGetStorage(() => TokenManager.getUser());
+      // FIX: safeParseJSON use
+      const storedUserRaw = safeGetStorage(() => TokenManager.getUserRaw? TokenManager.getUserRaw() : (localStorage.getItem("quickks_user") || localStorage.getItem("user")));
+      const storedUserFromRaw = safeParseJSON(storedUserRaw);
+      const storedUser = storedUserFromRaw || safeGetStorage(() => TokenManager.getUser());
 
       if (storedToken && storedUser) {
         if (!isTokenValid(storedToken)) {
-          // Inline refresh to avoid loop
           if (storedRefresh) {
             try {
               const res = await api.post('/auth/refresh', { refreshToken: storedRefresh });
@@ -200,19 +222,26 @@ export const AuthProvider = ({ children }) => {
                 const userData = { id: payload.userId?? storedUser.id, name: payload.fullName?? storedUser.name, email: payload.email || storedUser.email, role: payload.role || storedUser.role || 'CUSTOMER', avatar: payload.avatar || storedUser.avatar, permissions: payload.permissions || storedUser.permissions || [] };
                 updateTokens(newAccess, payload.refreshToken);
                 safeGetStorage(() => TokenManager.setUser(userData));
-                setUser(userData); setIsAuthenticated(true); setPermissions(userData.permissions || []); setSessionExpiry(getTokenExpiryTime(newAccess));
+                if(mountedRef.current){
+                  setUser(userData); setIsAuthenticated(true); setPermissions(userData.permissions || []); setSessionExpiry(getTokenExpiryTime(newAccess));
+                }
               } else { clearTokens(); }
-            } catch { clearTokens(); setUser(null); setIsAuthenticated(false); }
-          } else { clearTokens(); setUser(null); setIsAuthenticated(false); }
+            } catch { clearTokens(); if(mountedRef.current){ setUser(null); setIsAuthenticated(false);} }
+          } else { clearTokens(); if(mountedRef.current){ setUser(null); setIsAuthenticated(false);} }
         } else {
           updateTokens(storedToken, storedRefresh);
-          setUser(storedUser);
-          setIsAuthenticated(true);
-          setPermissions(storedUser.permissions || []);
-          setSessionExpiry(getTokenExpiryTime(storedToken));
+          if(mountedRef.current){
+            setUser(storedUser);
+            setIsAuthenticated(true);
+            setPermissions(storedUser.permissions || []);
+            setSessionExpiry(getTokenExpiryTime(storedToken));
+          }
         }
       }
-    } catch { clearTokens(); setUser(null); setIsAuthenticated(false); }
+    } catch {
+      clearTokens();
+      if(mountedRef.current){ setUser(null); setIsAuthenticated(false); }
+    }
     finally { if (mountedRef.current) { setLoading(false); setInitialized(true); } }
   }, [updateTokens, clearTokens]);
 
@@ -262,7 +291,7 @@ export const AuthProvider = ({ children }) => {
       const userObj = { id: payload.userId?? payload.id?? decoded?.userId, name: payload.fullName?? payload.name, email: payload.email || email, role: payload.role || 'CUSTOMER', avatar: payload.avatar || null, permissions: payload.permissions || [] };
       updateTokens(accessToken, newRefresh);
       safeGetStorage(() => TokenManager.setUser(userObj));
-      setUser(userObj); setIsAuthenticated(true); setPermissions(userObj.permissions); setSessionExpiry(getTokenExpiryTime(accessToken));
+      if(mountedRef.current){ setUser(userObj); setIsAuthenticated(true); setPermissions(userObj.permissions); setSessionExpiry(getTokenExpiryTime(accessToken)); }
       if (typeof window!== 'undefined') window.dispatchEvent(new CustomEvent(AUTH_EVENTS.LOGIN, { detail: { user: userObj } }));
       return { success: true, data: userObj };
     } catch (e) {
@@ -302,7 +331,7 @@ export const AuthProvider = ({ children }) => {
       const payload = unwrapApiData(res); const access = payload.accessToken || payload.token; const refresh = payload.refreshToken;
       const userObj = { id: payload.userId?? payload.id, name: payload.fullName?? payload.name, email: payload.email, role: payload.role || 'CUSTOMER', avatar: payload.avatar, permissions: payload.permissions || [] };
       updateTokens(access, refresh); safeGetStorage(() => TokenManager.setUser(userObj));
-      setUser(userObj); setIsAuthenticated(true); setPermissions(userObj.permissions); setSessionExpiry(getTokenExpiryTime(access)); setTwoFactorRequired(false);
+      if(mountedRef.current){ setUser(userObj); setIsAuthenticated(true); setPermissions(userObj.permissions); setSessionExpiry(getTokenExpiryTime(access)); setTwoFactorRequired(false); }
       return { success: true, data: userObj };
     } catch (e) { return { success: false, error: e.response?.data?.message || 'Invalid code' }; }
   }, [twoFactorToken, updateTokens]);

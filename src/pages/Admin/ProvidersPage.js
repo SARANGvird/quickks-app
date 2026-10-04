@@ -1,4 +1,4 @@
-// src/pages/Admin/ProvidersPage.jsx
+// src/pages/Admin/ProvidersPage.js
 // ✅ COMPLETE PRODUCTION-READY v8.1 FINAL - SAAS GRADE UI/UX
 // ✅ FIXED: React Hook useCallback dependency warning
 // ✅ FIXED: MoneyIcon undefined - replaced with AttachMoneyIcon
@@ -47,8 +47,6 @@ import {
   Grow,
   Zoom,
   Slide,
-  useMediaQuery,
-  useTheme,
   alpha
 } from "@mui/material";
 import {
@@ -67,7 +65,6 @@ import {
   Verified as VerifiedIcon,
   Cancel as CancelIcon,
   Star as StarIcon,
-  StarBorder as StarBorderIcon,
   LocationOn as LocationOnIcon,
   Email as EmailIcon,
   Phone as PhoneIcon,
@@ -83,9 +80,6 @@ import {
   PlayArrow as PlayArrowIcon,
   Pause as PauseIcon,
   SignalCellularConnectedNoInternet0Bar as SignalOffIcon,
-  TrendingUp as TrendingUpIcon,
-  TrendingDown as TrendingDownIcon,
-  MoreVert as MoreVertIcon,
   Visibility as VisibilityIcon,
   AttachMoney as AttachMoneyIcon
 } from "@mui/icons-material";
@@ -198,17 +192,6 @@ const getInitials = (name) => {
     .slice(0, 2);
 };
 
-const getStatusColor = (status) => {
-  const colors = {
-    'ACTIVE': '#22c55e',
-    'PENDING': '#f59e0b',
-    'REJECTED': '#ef4444',
-    'SUSPENDED': '#ef4444',
-    'INACTIVE': '#9ca3af'
-  };
-  return colors[status] || '#9ca3af';
-};
-
 const getStatusText = (status) => {
   const texts = {
     'ACTIVE': 'Active',
@@ -218,17 +201,6 @@ const getStatusText = (status) => {
     'INACTIVE': 'Inactive'
   };
   return texts[status] || status || 'Unknown';
-};
-
-const getStatusChipColor = (status) => {
-  const colors = {
-    'ACTIVE': 'success',
-    'PENDING': 'warning',
-    'REJECTED': 'error',
-    'SUSPENDED': 'error',
-    'INACTIVE': 'default'
-  };
-  return colors[status] || 'default';
 };
 
 const getStatusStyle = (status) => {
@@ -1201,9 +1173,6 @@ const SuspendDialog = ({ open, onClose, onConfirm, providerName }) => {
 
 const ProvidersPage = () => {
   const navigate = useNavigate();
-  const theme = useTheme();
-  const isMobile = useMediaQuery(theme.breakpoints.down('sm'));
-  const isTablet = useMediaQuery(theme.breakpoints.down('md'));
   
   const wsContext = useWebSocket();
   const notifContext = useNotifications();
@@ -1232,7 +1201,6 @@ const ProvidersPage = () => {
   const [suspendDialog, setSuspendDialog] = useState({ open: false, provider: null });
   const [actionDialog, setActionDialog] = useState({ open: false, type: null, provider: null });
   const [selectedProviders, setSelectedProviders] = useState([]);
-  const [selectAll, setSelectAll] = useState(false);
 
   const [tab, setTab] = useState(0);
   const [search, setSearch] = useState("");
@@ -1532,7 +1500,6 @@ const ProvidersPage = () => {
           severity: "success" 
         });
         setSelectedProviders([]);
-        setSelectAll(false);
         await loadProviders();
         await loadStats();
       }
@@ -1569,7 +1536,6 @@ const ProvidersPage = () => {
           severity: "info" 
         });
         setSelectedProviders([]);
-        setSelectAll(false);
         await loadProviders();
         await loadStats();
       }

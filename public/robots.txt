@@ -1,3 +1,9 @@
-# https://www.robotstxt.org/robotstxt.html
-User-agent: *
-Disallow:
+﻿User-agent: *
+Allow: /
+
+Sitemap: https://quickks.in/sitemap.xml
+
+Disallow: /admin/
+Disallow: /customer/dashboard
+Disallow: /provider/dashboard
+Disallow: /api/

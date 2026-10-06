@@ -59,8 +59,8 @@ import QuickksLogo from "../assets/quickks-logo.png";
 
 const CONTACT = {
   PHONE_DISPLAY: process.env.REACT_APP_SUPPORT_PHONE_DISPLAY || "+91 98765 43210",
-  PHONE_TEL: process.env.REACT_APP_SUPPORT_PHONE_TEL || "+919876543210",
-  WHATSAPP_NUMBER: process.env.REACT_APP_WHATSAPP_NUMBER || "919876543210",
+  PHONE_TEL: process.env.REACT_APP_SUPPORT_PHONE_TEL || "+919371365677",
+  WHATSAPP_NUMBER: process.env.REACT_APP_WHATSAPP_NUMBER || "919371365677",
   EMAIL: process.env.REACT_APP_SUPPORT_EMAIL || "support@quickks.com",
 };
 
@@ -520,7 +520,7 @@ const HomePage = () => {
 
         {showExitIntent && !isAuthenticated && (
           <Dialog open={showExitIntent} onClose={() => setShowExitIntent(false)} maxWidth="sm" fullWidth PaperProps={{ sx: { borderRadius: 4, bgcolor: "#0f172a", border: "1px solid rgba(255,255,255,0.1)" } }}>
-            <DialogTitle sx={{ color: "white", fontWeight: 800 }}>Wait! Get ₹100 OFF ⚡</DialogTitle>
+            <DialogTitle sx={{ color: "white", fontWeight: 800 }}>Wait! Get ₹100 OFF ⚡️</DialogTitle>
             <DialogContent>
               <Typography sx={{ color: "#94a3b8" }}>Enter email & get instant discount on first booking.</Typography>
               <TextField fullWidth placeholder="your@email.com" type="email" sx={{ mt: 2, "& .MuiOutlinedInput-root": { bgcolor: "rgba(255,255,255,0.05)", borderRadius: 3 } }} inputProps={{ style: { color: "white" } }} inputRef={emailInputRef} disabled={exitIntentSubmitting} />
@@ -740,4 +740,4 @@ const HomePage = () => {
   );
 };
 
-export default HomePage;
+export default HomePage; 

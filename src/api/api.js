@@ -1,15 +1,15 @@
-// src/api/api.js - v13.3 VITE FINAL - Vercel + Spring Boot
+// src/api/api.js - v14.0 FINAL PUNE PRODUCTION - No /quickks prefix
 import axios from 'axios';
 
 const isBrowser = typeof window !== 'undefined';
 
-// VITE FIX: process.env -> import.meta.env
+// ✅ SUPPORTS BOTH: VITE_ (new) + REACT_APP_ (old Vercel)
 const env = import.meta.env || {};
-const isDebug = env.VITE_ENABLE_DEBUG_LOGS === 'true' || env.REACT_APP_ENABLE_DEBUG_LOGS === 'true';
+const isDebug = env.VITE_ENABLE_DEBUG_LOGS === 'true' || env.REACT_APP_ENABLE_DEBUG_LOGS === 'true' || false;
 
-const RAW_BASE = env.VITE_API_BASE_URL || env.REACT_APP_API_BASE_URL || env.VITE_API_URL || env.REACT_APP_API_URL || 'https://api.quickks.in/quickks/api/v1';
+const RAW_BASE = env.VITE_API_BASE_URL || env.REACT_APP_API_BASE_URL || env.VITE_API_URL || env.REACT_APP_API_URL || 'https://api.quickks.in/api/v1';
 const API_BASE_URL = RAW_BASE.replace(/\/+$/, '');
-const WS_URL = (env.VITE_WS_URL || env.REACT_APP_WS_URL || 'wss://api.quickks.in/quickks/ws').replace(/\/+$/, '');
+const WS_URL = (env.VITE_WS_URL || env.REACT_APP_WS_URL || 'wss://api.quickks.in/ws').replace(/\/+$/, '');
 
 const debugLog = (...args) => { if (isDebug && isBrowser) console.log('[API]', ...args); };
 
@@ -168,7 +168,7 @@ export const defaultData = {
 
 export const wsConfig = {
   getWsUrl: () => WS_URL,
-  getSockJSUrl: () => API_BASE_URL.replace(/\/api\/v1\/?$/, '').replace(/\/quickks\/api\/v1\/?$/, '/quickks'),
+  getSockJSUrl: () => API_BASE_URL.replace(/\/api\/v1\/?$/, ''),
   getStompUrl: () => `${API_BASE_URL.replace(/\/api\/v1\/?$/, '')}/ws`,
 };
 

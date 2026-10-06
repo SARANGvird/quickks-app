@@ -9,8 +9,6 @@ import api from "../api/api";
 
 const RegisterPage = () => {
   const navigate = useNavigate();
-  
-  // ✅ FIXED: Defined state with correct initial structure
   const [form, setForm] = useState({
     name: "", 
     email: "", 
@@ -18,88 +16,95 @@ const RegisterPage = () => {
     password: "", 
     role: "CUSTOMER",
   });
-
   const [otpSent, setOtpSent] = useState(false);
   const [otp, setOtp] = useState("");
   const [isLoading, setIsLoading] = useState(false);
   const [message, setMessage] = useState({ text: "", type: "" });
 
-  // ✅ OPTIMIZED: useCallback prevents unnecessary re-renders
   const handleChange = useCallback((e) => {
     const { name, value } = e.target;
+    if (name === "phoneNumber") {
+      const numericValue = value.replace(/[^0-9]/g, "").slice(0, 10);
+      setForm((prev) => ({ ...prev, [name]: numericValue }));
+      return;
+    }
     setForm((prev) => ({ ...prev, [name]: value }));
   }, []);
 
-  // ✅ OPTIMIZED: useMemo caches password strength calculation
   const passwordStrength = useMemo(() => {
     const p = form.password;
     if (!p) return { score: 0, label: "", color: "#cbd5e1" };
-    if (p.length < 6) return { score: 33, label: "Weak", color: "#ef4444" };
-    if (!/[A-Z]/.test(p) || !/[0-9]/.test(p)) return { score: 66, label: "Medium", color: "#f59e0b" };
+    if (p.length < 6) return { score: 33, label: "Weak - Min 6 chars", color: "#ef4444" };
+    if (!/[A-Z]/.test(p) || !/[0-9]/.test(p) || !/[!@#$%^&*]/.test(p)) return { score: 66, label: "Medium", color: "#f59e0b" };
     return { score: 100, label: "Strong", color: "#22c55e" };
   }, [form.password]);
 
-  // ✅ SECURITY IMPROVEMENT: Prevent rapid-fire OTP requests
   const handleSendOtp = useCallback(async () => {
     if (isLoading) return;
-    
     setMessage({ text: "", type: "" });
-    
-    // Basic Validation before sending OTP
-    if (!form.name || !form.email || !form.phoneNumber || !form.password) {
-      setMessage({ text: "Please fill in all fields (including Phone) first.", type: "error" });
+    if (!form.name.trim() || !form.email.trim() || !form.phoneNumber.trim() || !form.password) {
+      setMessage({ text: "Please fill all fields.", type: "error" });
       return;
     }
-
+    if (form.phoneNumber.length !== 10) {
+      setMessage({ text: "Enter valid 10-digit phone number.", type: "error" });
+      return;
+    }
+    if (!/^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(form.email)) {
+      setMessage({ text: "Enter valid email address.", type: "error" });
+      return;
+    }
     setIsLoading(true);
     try {
-      // ✅ Matches your @RequestParam("email") in AuthController
       await api.post("/auth/send-otp", null, { 
         params: { email: form.email.toLowerCase().trim() } 
       });
       setOtpSent(true);
-      setMessage({ text: "Verification code sent to your email!", type: "success" });
+      setMessage({ text: `OTP sent to ${form.email} - Check inbox & spam!`, type: "success" });
     } catch (err) {
-      const errorMsg = err.response?.data?.message || err.response?.data?.error || "Failed to send OTP.";
+      const errorMsg = err.response?.data?.message || err.response?.data?.error || "Failed to send OTP. Email already exists?";
       setMessage({ text: errorMsg, type: "error" });
     } finally {
       setIsLoading(false);
     }
   }, [form, isLoading]);
 
-  // ✅ CRITICAL BUG FIX: Explicitly map 'name' to 'fullName' for the Backend
   const handleRegister = useCallback(async (e) => {
     e.preventDefault();
-    if (!otp) {
-      setMessage({ text: "Please enter the OTP.", type: "error" });
+    if (!otp || otp.length !== 6) {
+      setMessage({ text: "Enter valid 6-digit OTP.", type: "error" });
       return;
     }
-
     setIsLoading(true);
+    setMessage({ text: "", type: "" });
     try {
-      // ✅ FIXED: Construct a new object that maps 'name' -> 'fullName'
       const payload = {
-        fullName: form.name,        // ✅ Maps frontend 'name' to backend 'fullName'
-        email: form.email,
-        phoneNumber: form.phoneNumber,
+        fullName: form.name.trim(),
+        email: form.email.toLowerCase().trim(),
+        phoneNumber: `+91${form.phoneNumber}`,
         password: form.password,
         role: form.role
       };
-
-      // ✅ Sends OTP as Query Param and Form as JSON Body
-      const response = await api.post(`/auth/register?otp=${otp}`, payload);
-      
-      // ✅ Check if registration actually succeeded
+      const response = await api.post(`/auth/register`, payload, {
+        params: { otp: otp.trim() }
+      });
       if (response.status === 201 || response.status === 200) {
-        setMessage({ text: "Success! Welcome to Quickks.", type: "success" });
+        setMessage({ text: "🎉 Registered! Redirecting to Login...", type: "success" });
         setTimeout(() => navigate("/login"), 1500);
-      } else {
-        throw new Error(response.data?.message || "Registration failed");
       }
     } catch (err) {
-      console.error("Registration Error:", err);
-      // Handle the Validation errors specifically
-      const errorMsg = err.response?.data?.message || err.response?.data?.error || "Invalid OTP or registration failed.";
+      console.error("Registration Error:", err.response?.data);
+      const data = err.response?.data;
+      let errorMsg = data?.message || "Registration failed. Invalid OTP?";
+      if (data?.errors) {
+        errorMsg = Object.values(data.errors).join(", ");
+      }
+      if (err.response?.status === 409) {
+        errorMsg = "User already exists with this email/phone!";
+      }
+      if (err.response?.status === 400 && errorMsg.includes("OTP")) {
+        errorMsg = "Invalid or Expired OTP. Please resend OTP.";
+      }
       setMessage({ text: errorMsg, type: "error" });
     } finally {
       setIsLoading(false);
@@ -109,101 +114,48 @@ const RegisterPage = () => {
   return (
     <div style={styles.container}>
       <div style={styles.overlay} />
-      
-      <motion.div 
-        initial={{ opacity: 0, y: 20 }}
-        animate={{ opacity: 1, y: 0 }}
-        style={styles.card}
-      >
+      <motion.div initial={{ opacity: 0, y: 20 }} animate={{ opacity: 1, y: 0 }} style={styles.card}>
         <div style={styles.header}>
           <div style={styles.brandBadge}>
             <UserPlus size={24} color="#fbbf24" />
           </div>
-          <h1 style={styles.brandTitle}>Quickks<span>.</span></h1>
+          <h1 style={styles.brandTitle}>Quickks<span style={{color: "#fbbf24"}}>.</span></h1>
           <div style={styles.stepTrack}>
              <div style={{...styles.stepDot, background: "#fbbf24"}} />
              <div style={{...styles.stepLine, background: otpSent ? "#fbbf24" : "#e2e8f0"}} />
              <div style={{...styles.stepDot, background: otpSent ? "#fbbf24" : "#e2e8f0"}} />
           </div>
-          <p style={styles.subTitle}>
-            {otpSent ? "Almost there! Verify your identity" : "Join our community of professionals"}
-          </p>
+          <p style={styles.subTitle}>{otpSent ? "Verify your identity" : "Join our community of professionals"}</p>
         </div>
-
         <AnimatePresence>
           {message.text && (
-            <motion.div 
-              initial={{ opacity: 0, height: 0 }}
-              animate={{ opacity: 1, height: "auto" }}
-              exit={{ opacity: 0, height: 0 }}
-              style={{...styles.alert, backgroundColor: message.type === "error" ? "#fef2f2" : "#f0fdf4"}}
-            >
+            <motion.div initial={{ opacity: 0, height: 0 }} animate={{ opacity: 1, height: "auto" }} exit={{ opacity: 0, height: 0 }} style={{...styles.alert, backgroundColor: message.type === "error" ? "#fef2f2" : "#f0fdf4", borderColor: message.type === "error" ? "#fecaca" : "#bbf7d0"}}>
               {message.type === "error" ? <AlertCircle size={16} color="#ef4444" /> : <CheckCircle2 size={16} color="#22c55e" />}
               <span style={{color: message.type === "error" ? "#991b1b" : "#166534"}}>{message.text}</span>
             </motion.div>
           )}
         </AnimatePresence>
-
         <form onSubmit={handleRegister} style={styles.form}>
           <AnimatePresence mode="wait">
             {!otpSent ? (
-              <motion.div 
-                key="step1" 
-                initial={{ x: -20, opacity: 0 }} 
-                animate={{ x: 0, opacity: 1 }}
-                exit={{ x: 20, opacity: 0 }}
-                style={styles.stepWrapper}
-              >
+              <motion.div key="step1" initial={{ x: -20, opacity: 0 }} animate={{ x: 0, opacity: 1 }} exit={{ x: 20, opacity: 0 }} style={styles.stepWrapper}>
                 <div style={styles.inputGroup}>
                   <User size={18} style={styles.icon} />
-                  <input 
-                    name="name" 
-                    placeholder="Full Name" 
-                    value={form.name} 
-                    onChange={handleChange} 
-                    required 
-                    style={styles.input} 
-                  />
+                  <input name="name" placeholder="Full Name" value={form.name} onChange={handleChange} required style={styles.input} maxLength={50} />
                 </div>
-
                 <div style={styles.inputGroup}>
                   <Mail size={18} style={styles.icon} />
-                  <input 
-                    name="email" 
-                    type="email" 
-                    placeholder="Email Address" 
-                    value={form.email} 
-                    onChange={handleChange} 
-                    required 
-                    style={styles.input} 
-                  />
+                  <input name="email" type="email" placeholder="Email Address" value={form.email} onChange={handleChange} required style={styles.input} />
                 </div>
-
                 <div style={styles.inputGroup}>
                   <Smartphone size={18} style={styles.icon} />
-                  <input 
-                    name="phoneNumber" 
-                    placeholder="Phone Number" 
-                    value={form.phoneNumber} 
-                    onChange={handleChange} 
-                    required 
-                    style={styles.input} 
-                  />
+                  <span style={styles.prefix}>+91</span>
+                  <input name="phoneNumber" placeholder="Phone Number" value={form.phoneNumber} onChange={handleChange} required style={{...styles.input, paddingLeft: "58px"}} maxLength={10} inputMode="numeric" />
                 </div>
-
                 <div style={styles.inputGroup}>
                   <Lock size={18} style={styles.icon} />
-                  <input 
-                    name="password" 
-                    type="password" 
-                    placeholder="Create Password" 
-                    value={form.password} 
-                    onChange={handleChange} 
-                    required 
-                    style={styles.input} 
-                  />
+                  <input name="password" type="password" placeholder="Create Password (Min 8 chars)" value={form.password} onChange={handleChange} required style={styles.input} minLength={8} />
                 </div>
-
                 {form.password && (
                   <div style={styles.strengthWrapper}>
                     <div style={styles.strengthTrack}>
@@ -212,91 +164,43 @@ const RegisterPage = () => {
                     <span style={{...styles.strengthLabel, color: passwordStrength.color}}>{passwordStrength.label}</span>
                   </div>
                 )}
-
                 <div style={styles.inputGroup}>
                   <ShieldCheck size={18} style={styles.icon} />
-                  <select 
-                    name="role" 
-                    value={form.role} 
-                    onChange={handleChange} 
-                    style={styles.input}
-                  >
+                  <select name="role" value={form.role} onChange={handleChange} style={styles.input}>
                     <option value="CUSTOMER">I am a Customer</option>
                     <option value="PROVIDER">I am a Service Provider</option>
                   </select>
                 </div>
-
-                <button 
-                  type="button" 
-                  onClick={handleSendOtp} 
-                  disabled={isLoading} 
-                  style={styles.primaryBtn}
-                >
-                  {isLoading ? <Loader2 className="spin" /> : <>Continue <ArrowRight size={18} /></>}
+                <button type="button" onClick={handleSendOtp} disabled={isLoading} style={styles.primaryBtn}>
+                  {isLoading ? <Loader2 size={18} className="spin" /> : <>Continue <ArrowRight size={18} /></>}
                 </button>
               </motion.div>
             ) : (
-              <motion.div 
-                key="step2"
-                initial={{ x: 20, opacity: 0 }} 
-                animate={{ x: 0, opacity: 1 }}
-                style={styles.stepWrapper}
-              >
-                <div style={styles.otpInfo}>
-                  Enter the 6-digit code sent to <br/><strong>{form.email}</strong>
-                </div>
+              <motion.div key="step2" initial={{ x: 20, opacity: 0 }} animate={{ x: 0, opacity: 1 }} style={styles.stepWrapper}>
+                <div style={styles.otpInfo}>Enter 6-digit code sent to<br/><strong>{form.email}</strong></div>
                 <div style={styles.inputGroup}>
                   <ShieldCheck size={18} style={styles.icon} />
-                  <input 
-                    placeholder="Enter OTP" 
-                    value={otp} 
-                    onChange={(e) => setOtp(e.target.value)} 
-                    maxLength={6}
-                    required 
-                    style={styles.input} 
-                  />
+                  <input placeholder="Enter 6-digit OTP" value={otp} onChange={(e) => setOtp(e.target.value.replace(/[^0-9]/g, "").slice(0,6))} maxLength={6} required style={{...styles.input, letterSpacing: "8px", textAlign: "center", fontWeight: 700, fontSize: "1.2rem"}} inputMode="numeric" />
                 </div>
-                <button 
-                  type="submit" 
-                  disabled={isLoading} 
-                  style={{...styles.primaryBtn, background: "#16a34a"}}
-                >
-                  {isLoading ? <Loader2 className="spin" /> : "Verify & Complete"}
+                <button type="submit" disabled={isLoading || otp.length !== 6} style={{...styles.primaryBtn, background: otp.length===6 ? "#16a34a" : "#94a3b8"}}>
+                  {isLoading ? <Loader2 size={18} className="spin" /> : "Verify & Complete"}
                 </button>
-                <button 
-                  type="button" 
-                  onClick={() => setOtpSent(false)} 
-                  style={styles.backBtn}
-                >
-                  ← Edit Registration Details
-                </button>
+                <button type="button" onClick={() => { setOtpSent(false); setOtp(""); }} style={styles.backBtn}>← Edit Details / Resend OTP</button>
               </motion.div>
             )}
           </AnimatePresence>
         </form>
-
-        <p style={styles.footerText}>
-          Already have an account? <span onClick={() => navigate("/login")} style={styles.link}>Login</span>
-        </p>
+        <p style={styles.footerText}>Already have an account? <span onClick={() => navigate("/login")} style={styles.link}>Login</span></p>
       </motion.div>
-
-      <style>{`.spin { animation: rotation 1s linear infinite; } @keyframes rotation { from { transform: rotate(0deg); } to { transform: rotate(360deg); } }`}</style>
+      <style>{`.spin { animation: rotation 1s linear infinite; } @keyframes rotation { from { transform: rotate(0deg); } to { transform: rotate(360deg); } } input:focus{border-color:#fbbf24 !important; background:#fff !important; box-shadow:0 0 0 3px rgba(251,191,36,0.15) !important;}`}</style>
     </div>
   );
 };
 
-// Enhanced Styles (Production-Ready)
 const styles = {
-  container: {
-    height: "100vh", display: "flex", justifyContent: "center", alignItems: "center",
-    backgroundImage: "url('https://images.unsplash.com/photo-1511739001486-6bfe10ce785f?auto=format&fit=crop&w=1600&q=80')",
-    backgroundSize: "cover", backgroundPosition: "center", position: "relative", fontFamily: "'Inter', sans-serif"
-  },
+  container: { minHeight: "100vh", display: "flex", justifyContent: "center", alignItems: "center", backgroundImage: "url('https://images.unsplash.com/photo-1511739001486-6bfe10ce785f?auto=format&fit=crop&w=1600&q=80')", backgroundSize: "cover", backgroundPosition: "center", position: "relative", fontFamily: "'Inter', sans-serif", padding: "20px" },
   overlay: { position: "absolute", inset: 0, background: "rgba(15, 23, 42, 0.8)", backdropFilter: "blur(10px)" },
-  card: {
-    zIndex: 2, width: "100%", maxWidth: 460, padding: "40px", background: "#fff",
-    borderRadius: "28px", boxShadow: "0 25px 50px -12px rgba(0, 0, 0, 0.5)",
-  },
+  card: { zIndex: 2, width: "100%", maxWidth: 460, padding: "40px", background: "#fff", borderRadius: "28px", boxShadow: "0 25px 50px -12px rgba(0, 0, 0, 0.5)" },
   header: { textAlign: "center", marginBottom: "30px" },
   brandBadge: { width: 50, height: 50, background: "#fff9eb", borderRadius: "14px", display: "flex", alignItems: "center", justifyContent: "center", margin: "0 auto 12px" },
   brandTitle: { fontSize: "1.8rem", fontWeight: 800, color: "#1e293b", margin: 0 },
@@ -304,28 +208,22 @@ const styles = {
   stepTrack: { display: "flex", alignItems: "center", justifyContent: "center", gap: "8px", marginTop: "10px" },
   stepDot: { width: 8, height: 8, borderRadius: "50%" },
   stepLine: { width: 40, height: 2, borderRadius: 1 },
-  alert: { display: "flex", alignItems: "center", gap: "10px", padding: "12px", borderRadius: "12px", marginBottom: "20px", fontSize: "0.85rem" },
+  alert: { display: "flex", alignItems: "center", gap: "10px", padding: "12px", borderRadius: "12px", marginBottom: "20px", fontSize: "0.85rem", border: "1px solid" },
   form: { display: "flex", flexDirection: "column", gap: "16px" },
   stepWrapper: { display: "flex", flexDirection: "column", gap: "16px" },
   inputGroup: { position: "relative", display: "flex", alignItems: "center" },
-  icon: { position: "absolute", left: "16px", color: "#94a3b8" },
-  input: {
-    width: "100%", padding: "14px 16px 14px 48px", borderRadius: "12px", border: "1px solid #e2e8f0",
-    fontSize: "0.95rem", outline: "none", transition: "0.2s", background: "#f8fafc"
-  },
+  icon: { position: "absolute", left: "16px", color: "#94a3b8", zIndex: 1 },
+  prefix: { position: "absolute", left: "48px", color: "#334155", fontWeight: 600, fontSize: "0.9rem", zIndex: 1 },
+  input: { width: "100%", padding: "14px 16px 14px 48px", borderRadius: "12px", border: "1px solid #e2e8f0", fontSize: "0.95rem", outline: "none", transition: "0.2s", background: "#f8fafc" },
   strengthWrapper: { marginTop: "-8px" },
   strengthTrack: { height: 4, background: "#f1f5f9", borderRadius: 2, overflow: "hidden" },
   strengthFill: { height: "100%", transition: "0.4s ease" },
   strengthLabel: { fontSize: "0.75rem", fontWeight: 600, display: "block", marginTop: "4px" },
-  primaryBtn: {
-    padding: "16px", borderRadius: "12px", background: "#fbbf24", color: "#000",
-    border: "none", fontWeight: 700, cursor: "pointer", fontSize: "1rem",
-    display: "flex", alignItems: "center", justifyContent: "center", gap: "10px", transition: "0.3s"
-  },
+  primaryBtn: { padding: "16px", borderRadius: "12px", background: "#fbbf24", color: "#000", border: "none", fontWeight: 700, cursor: "pointer", fontSize: "1rem", display: "flex", alignItems: "center", justifyContent: "center", gap: "10px", transition: "0.3s" },
   backBtn: { background: "none", border: "none", color: "#64748b", cursor: "pointer", fontSize: "0.85rem", textDecoration: "underline", marginTop: "8px" },
   otpInfo: { textAlign: "center", fontSize: "0.9rem", color: "#64748b", marginBottom: "10px" },
   footerText: { textAlign: "center", marginTop: "24px", fontSize: "0.9rem", color: "#64748b" },
-  link: { color: "#fbbf24", fontWeight: 700, cursor: "pointer", marginLeft: "5px" }
+  link: { color: "#d97706", fontWeight: 700, cursor: "pointer", marginLeft: "5px" }
 };
 
 export default RegisterPage;

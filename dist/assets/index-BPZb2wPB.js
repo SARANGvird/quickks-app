@@ -1,0 +1,1 @@
+import{r as s,a as u,t as i}from"./index-DfMyM1GT.js";function o(e,t){s(2,arguments);var a=u(e),r=i(t);return isNaN(r)?new Date(NaN):(r&&a.setDate(a.getDate()+r),a)}function n(e){s(1,arguments);var t=u(e);return t.setHours(0,0,0,0),t}function g(e,t){s(2,arguments);var a=n(e),r=n(t);return a.getTime()===r.getTime()}export{o as a,g as i,n as s};

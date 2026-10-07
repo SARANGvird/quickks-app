@@ -1,4 +1,4 @@
-// src/App.js - v14 PRODUCTION FINAL
+// src/App.js - v15 PRODUCTION FINAL - SEO FIX
 import React, { Suspense, lazy, useEffect } from 'react';
 import {
   Routes,
@@ -17,13 +17,11 @@ import ErrorBoundary from './components/ErrorBoundary';
 import LoadingSpinner from './components/LoadingSpinner';
 import HomePage from './pages/HomePage';
 
-/* VITE FIX */
 const env = import.meta.env || {};
 const ERROR_ENDPOINT = env.VITE_ERROR_ENDPOINT || env.REACT_APP_ERROR_ENDPOINT || null;
 const RELEASE = env.VITE_VERSION || env.REACT_APP_VERSION || env.VITE_VERCEL_GIT_COMMIT_SHA || '1.0.0';
 
 const ADMIN_ROLES = ['ADMIN', 'SUPER_ADMIN'];
-
 const wait = ms => new Promise(resolve => setTimeout(resolve, ms));
 
 const lazyWithRetry = (factory, { retries = 2, delay = 800 } = {}) =>
@@ -52,6 +50,10 @@ const DashboardLandingPage = lazyWithRetry(() => import('./pages/DashboardLandin
 const BookingForm = lazyWithRetry(() => import('./components/BookingForm'));
 const PaymentSuccess = lazyWithRetry(() => import('./pages/PaymentSuccess'));
 const PaymentFailed = lazyWithRetry(() => import('./pages/PaymentFailed'));
+
+// ✅ FIX 1: Services Pages - SEO sathi add kele
+const ServicesPage = lazyWithRetry(() => import('./pages/ServicesPage'));
+const DynamicServicePage = lazyWithRetry(() => import('./pages/DynamicServicePage'));
 
 const CustomerDashboard = lazyWithRetry(() => import('./pages/Customer/CustomerDashboard'));
 const ProviderDashboard = lazyWithRetry(() => import('./pages/Provider/ProviderDashboard'));
@@ -126,7 +128,16 @@ const AppRoutes = () => {
         <Route path="/about" element={<AboutPage />} />
         <Route path="/contact" element={<ContactPage />} />
         <Route path="/support" element={<SupportPage />} />
+
+        {/* ✅ FIX 2: SERVICES ROUTES - Google 404 fix */}
+        <Route path="/services" element={<ServicesPage />} />
+        <Route path="/services/:serviceName" element={<DynamicServicePage />} />
+
+        {/* ✅ FIX 3: SEO SLUG ROUTES - electrician-in-kothrud */}
+        <Route path="/:slug" element={<DynamicServicePage />} />
+
         <Route path="/booking" element={<BookingForm />} />
+        <Route path="/book" element={<BookingForm />} />
         <Route path="/unauthorized" element={<Unauthorized />} />
         <Route path="/payment/success" element={<PaymentSuccess />} />
         <Route path="/payment/failed" element={<PaymentFailed />} />
@@ -159,6 +170,7 @@ const AppRoutes = () => {
             <Route path="/admin/settings/*" element={<AdminSettingsPage />} />
           </Route>
         </Route>
+        {/* ✅ FIX 4: NotFound shevti thevla - adhi SEO routes check hotil */}
         <Route path="*" element={<NotFoundPage />} />
       </Routes>
     </Suspense>

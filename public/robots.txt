@@ -1,9 +1,58 @@
-﻿User-agent: *
+﻿# Quickks - Professional Home Services - Pune
+# Robots.txt - Google Search Optimized - v18 PRODUCTION
+
+User-agent: *
 Allow: /
 
-Sitemap: https://quickks.in/sitemap.xml
-
+# -----------------------------
+# DISALLOW - Private & Sensitive
+# -----------------------------
 Disallow: /admin/
+Disallow: /dashboard/
 Disallow: /customer/dashboard
 Disallow: /provider/dashboard
+Disallow: /provider/profile
+Disallow: /provider/bookings
+Disallow: /provider/strikes
+Disallow: /login
+Disallow: /register
+Disallow: /forgot-password
+Disallow: /reset-password/
+Disallow: /payment/
+Disallow: /unauthorized
+
+# Block query params with tokens/passwords
+Disallow: /*?*token=*
+Disallow: /*?*password=*
+Disallow: /*?*email=*
+Disallow: /*?*reset=*
+
+# Block API calls from frontend crawling
 Disallow: /api/
+Disallow: /quickks/api/
+
+# -----------------------------
+# ALLOW - Googlebot, Bingbot Special
+# -----------------------------
+User-agent: Googlebot
+Allow: /
+Crawl-delay: 1
+
+User-agent: Bingbot
+Allow: /
+Crawl-delay: 1
+
+User-agent: Googlebot-Image
+Allow: /
+
+User-agent: Googlebot-Video
+Allow: /
+
+# -----------------------------
+# SITEMAPS - MUST FOR GC
+# -----------------------------
+Sitemap: https://www.quickks.in/sitemap.xml
+Sitemap: https://api.quickks.in/sitemap.xml
+
+# Host
+Host: https://www.quickks.in

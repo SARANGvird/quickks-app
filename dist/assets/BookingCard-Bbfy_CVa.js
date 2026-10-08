@@ -1,1 +1,0 @@
-import{i as e}from"./index-BPZb2wPB.js";import{s as o}from"./index-Cvb-cVoA.js";import{r as t}from"./index-DfMyM1GT.js";import"./index-CFL1F1tX.js";function n(r){return t(1,arguments),e(r,o(Date.now(),1))}const u=Object.freeze(Object.defineProperty({__proto__:null},Symbol.toStringTag,{value:"Module"}));export{u as B,n as i};

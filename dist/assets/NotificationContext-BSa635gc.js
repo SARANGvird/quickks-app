@@ -1,1 +1,0 @@
-import{r as o}from"./index-CFL1F1tX.js";import"./WebSocketProvider-zzGPkz-Z.js";const i=o.createContext(null),a=()=>{const t=o.useContext(i);return t||(console.warn("useNotifications outside Provider"),{notifications:[],unreadCount:0,addNotification:()=>{},removeNotification:()=>{},markAsRead:()=>{},markAllAsRead:()=>{},clearNotifications:()=>{},isConnected:!1})};export{a as u};

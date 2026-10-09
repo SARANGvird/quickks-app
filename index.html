@@ -1,79 +1,84 @@
 ﻿<!DOCTYPE html>
 <html lang="en">
 <head>
-<meta charset="utf-8" />
-<meta name="viewport" content="width=device-width, initial-scale=1, maximum-scale=5" />
-<meta http-equiv="X-UA-Compatible" content="IE=edge" />
+  <meta charset="utf-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1, maximum-scale=5" />
+  <meta http-equiv="X-UA-Compatible" content="IE=edge" />
 
-<!-- Google tag (gtag.js) - GA4 -->
-<script async src="https://www.googletagmanager.com/gtag/js?id=G-ZC13NMTYY2"></script>
-<script>
-  window.dataLayer = window.dataLayer || [];
-  function gtag(){dataLayer.push(arguments);}
-  gtag('js', new Date());
-  gtag('config', 'G-ZC13NMTYY2', { 'anonymize_ip': true });
-</script>
+  <!-- CSP - PRODUCTION READY 
+       Note: 'frame-ancestors' was removed from this meta tag to eliminate browser warnings.
+       Configure 'frame-ancestors' on your HTTP response server headers (Vercel/Nginx/Express). -->
+  <meta 
+    http-equiv="Content-Security-Policy" 
+    content="default-src 'self'; base-uri 'self'; object-src 'none'; form-action 'self' https://api.quickks.in https://api.razorpay.com; script-src 'self' 'unsafe-inline' 'unsafe-eval' https://vercel.live https://*.vercel.app https://maps.googleapis.com https://maps.gstatic.com https://checkout.razorpay.com https://cdn.razorpay.com https://*.razorpay.com https://www.googletagmanager.com https://www.google-analytics.com https://www.google.com https://www.gstatic.com; style-src 'self' 'unsafe-inline' https://fonts.googleapis.com https://maps.googleapis.com; font-src 'self' data: https://fonts.gstatic.com https://fonts.googleapis.com; img-src 'self' data: blob: https: https://images.unsplash.com https://*.unsplash.com https://*.openstreetmap.org https://*.googleapis.com https://*.gstatic.com https://*.razorpay.com https://*.vercel.app https://www.googletagmanager.com https://www.google-analytics.com https://www.google.com https://www.quickks.in https://quickks.in; connect-src 'self' https://api.quickks.in https://www.quickks.in https://quickks.in https://*.vercel.app wss://api.quickks.in https://vercel.live https://maps.googleapis.com https://maps.gstatic.com https://nominatim.openstreetmap.org https://*.razorpay.com https://api.razorpay.com https://lumberjack.razorpay.com https://lumberjack-cx.razorpay.com https://www.googletagmanager.com https://www.google-analytics.com https://www.google.com https://region1.google-analytics.com https://region1.analytics.google.com https://www.google.co.in; frame-src 'self' https://api.razorpay.com https://*.razorpay.com https://checkout.razorpay.com https://vercel.live; worker-src 'self' blob:; media-src 'self' blob:;"
+  />
 
-<!-- Primary SEO - Pune Focus -->
-<title>Quickks - Electrician, Plumber in Pune | Kothrud, Baner, Hadapsar</title>
-<meta name="description" content="Book verified electricians, plumbers, AC repair in Pune - Kothrud, Katraj, Baner, Hinjewadi, Wakad, Hadapsar. 60 min service, 24/7 support. Quickks.in" />
-<meta name="keywords" content="electrician in Kothrud, plumber in Baner, electrician in Hadapsar, home services Pune, AC repair Wakad, plumber Katraj, Hinjewadi electrician" />
-<meta name="author" content="Quickks" />
-<meta name="robots" content="index, follow, max-image-preview:large" />
-<link rel="canonical" href="https://www.quickks.in/" />
+  <!-- Primary SEO - Pune Focus -->
+  <title>Quickks - Electrician, Plumber in Pune | Kothrud, Baner, Hadapsar</title>
+  <meta name="description" content="Book verified electricians, plumbers, AC repair in Pune - Kothrud, Katraj, Baner, Hinjewadi, Wakad, Hadapsar. 60 min service, 24/7 support. Quickks.in" />
+  <meta name="keywords" content="electrician in Kothrud, plumber in Baner, electrician in Hadapsar, home services Pune, AC repair Wakad, plumber Katraj, Hinjewadi electrician" />
+  <meta name="author" content="Quickks" />
+  <meta name="robots" content="index, follow, max-image-preview:large" />
+  <link rel="canonical" href="https://www.quickks.in/" />
 
-<!-- Favicon & PWA -->
-<link rel="icon" href="/favicon.ico" />
-<link rel="apple-touch-icon" href="/logo192.png" />
-<link rel="manifest" href="/manifest.json" />
-<meta name="theme-color" content="#0f172a" />
+  <!-- Favicon & PWA -->
+  <link rel="icon" href="/favicon.ico" />
+  <link rel="apple-touch-icon" href="/logo192.png" />
+  <link rel="manifest" href="/manifest.json" />
+  <meta name="theme-color" content="#0f172a" />
 
-<!-- Open Graph -->
-<meta property="og:type" content="website" />
-<meta property="og:url" content="https://www.quickks.in/" />
-<meta property="og:title" content="Quickks - Trusted Home Services in Pune" />
-<meta property="og:description" content="Verified electricians & plumbers in Kothrud, Baner, Wakad, Hadapsar, Hinjewadi, Katraj. 4.8 rated." />
-<meta property="og:image" content="https://www.quickks.in/og-image.png" />
-<meta property="og:image:width" content="1200" />
-<meta property="og:image:height" content="630" />
+  <!-- Open Graph -->
+  <meta property="og:type" content="website" />
+  <meta property="og:url" content="https://www.quickks.in/" />
+  <meta property="og:title" content="Quickks - Trusted Home Services in Pune" />
+  <meta property="og:description" content="Verified electricians & plumbers in Kothrud, Baner, Wakad, Hadapsar, Hinjewadi, Katraj. 4.8 rated." />
+  <meta property="og:image" content="https://www.quickks.in/og-image.png" />
+  <meta property="og:image:width" content="1200" />
+  <meta property="og:image:height" content="630" />
 
-<!-- Twitter -->
-<meta name="twitter:card" content="summary_large_image" />
-<meta name="twitter:title" content="Quickks - Pune's Trusted Home Services" />
-<meta name="twitter:description" content="Book pros in Kothrud, Katraj, Baner, Hinjewadi, Wakad, Hadapsar in 60 mins." />
-<meta name="twitter:image" content="https://www.quickks.in/og-image.png" />
+  <!-- Twitter -->
+  <meta name="twitter:card" content="summary_large_image" />
+  <meta name="twitter:title" content="Quickks - Pune's Trusted Home Services" />
+  <meta name="twitter:description" content="Book pros in Kothrud, Katraj, Baner, Hinjewadi, Wakad, Hadapsar in 60 mins." />
+  <meta name="twitter:image" content="https://www.quickks.in/og-image.png" />
 
-<!-- Performance -->
-<link rel="preconnect" href="https://fonts.googleapis.com" />
-<link rel="preconnect" href="https://fonts.gstatic.com" crossorigin />
-<link rel="preconnect" href="https://images.unsplash.com" />
-<link rel="preconnect" href="https://checkout.razorpay.com" />
-<link rel="preconnect" href="https://api.quickks.in" />
-<link rel="preconnect" href="https://www.googletagmanager.com" />
-<link rel="preconnect" href="https://www.google.com" />
-<link rel="dns-prefetch" href="https://nominatim.openstreetmap.org" />
+  <!-- Resource Hints & Preconnects -->
+  <link rel="preconnect" href="https://fonts.googleapis.com" />
+  <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin />
+  <link rel="preconnect" href="https://images.unsplash.com" />
+  <link rel="preconnect" href="https://checkout.razorpay.com" />
+  <link rel="preconnect" href="https://api.quickks.in" />
+  <link rel="preconnect" href="https://www.googletagmanager.com" />
+  <link rel="preconnect" href="https://www.google.com" />
+  <link rel="dns-prefetch" href="https://nominatim.openstreetmap.org" />
 
-<!-- CSP - PRODUCTION A+ - ALL FIXED -->
-<meta http-equiv="Content-Security-Policy" content="default-src 'self'; base-uri 'self'; object-src 'none'; frame-ancestors 'self'; form-action 'self' https://api.quickks.in https://api.razorpay.com; script-src 'self' 'unsafe-inline' 'unsafe-eval' https://vercel.live https://*.vercel.app https://maps.googleapis.com https://maps.gstatic.com https://checkout.razorpay.com https://cdn.razorpay.com https://*.razorpay.com https://www.googletagmanager.com https://www.google-analytics.com https://www.google.com https://www.gstatic.com; style-src 'self' 'unsafe-inline' https://fonts.googleapis.com https://maps.googleapis.com; font-src 'self' data: https://fonts.gstatic.com https://fonts.googleapis.com; img-src 'self' data: blob: https: https://images.unsplash.com https://*.unsplash.com https://*.openstreetmap.org https://*.googleapis.com https://*.gstatic.com https://*.razorpay.com https://*.vercel.app https://www.googletagmanager.com https://www.google-analytics.com https://www.google.com https://www.quickks.in https://quickks.in; connect-src 'self' https://api.quickks.in https://www.quickks.in https://quickks.in https://*.vercel.app wss://api.quickks.in https://vercel.live https://maps.googleapis.com https://maps.gstatic.com https://nominatim.openstreetmap.org https://*.razorpay.com https://api.razorpay.com https://lumberjack.razorpay.com https://lumberjack-cx.razorpay.com https://www.googletagmanager.com https://www.google-analytics.com https://www.google.com https://region1.google-analytics.com https://region1.analytics.google.com https://www.google.co.in; frame-src 'self' https://api.razorpay.com https://*.razorpay.com https://checkout.razorpay.com https://vercel.live; worker-src 'self' blob:; media-src 'self' blob:;">
+  <!-- Analytics - GA4 -->
+  <script async src="https://www.googletagmanager.com/gtag/js?id=G-ZC13NMTYY2"></script>
+  <script>
+    window.dataLayer = window.dataLayer || [];
+    function gtag(){dataLayer.push(arguments);}
+    gtag('js', new Date());
+    gtag('config', 'G-ZC13NMTYY2', { 'anonymize_ip': true });
+  </script>
 
-<!-- Pune Structured Data -->
-<script type="application/ld+json">
-{
-  "@context": "https://schema.org",
-  "@type": "LocalBusiness",
-  "name": "Quickks - Pune",
-  "url": "https://www.quickks.in",
-  "logo": "https://www.quickks.in/logo.png",
-  "description": "Trusted home services platform for electricians, plumbers and AC repair experts in Pune",
-  "priceRange": "₹₹",
-  "areaServed": { "@type": "City", "name": "Pune" },
-  "aggregateRating": { "@type": "AggregateRating", "ratingValue": "4.8", "reviewCount": "1250" }
-}
-</script>
+  <!-- Structured Data (JSON-LD) -->
+  <script type="application/ld+json">
+  {
+    "@context": "https://schema.org",
+    "@type": "LocalBusiness",
+    "name": "Quickks - Pune",
+    "url": "https://www.quickks.in",
+    "logo": "https://www.quickks.in/logo.png",
+    "description": "Trusted home services platform for electricians, plumbers and AC repair experts in Pune",
+    "priceRange": "₹₹",
+    "areaServed": { "@type": "City", "name": "Pune" },
+    "aggregateRating": { "@type": "AggregateRating", "ratingValue": "4.8", "reviewCount": "1250" }
+  }
+  </script>
 </head>
 <body>
-<noscript>You need to enable JavaScript to run Quickks.</noscript>
-<div id="root"></div>
-<script type="module" src="/src/index.jsx"></script>
+  <noscript>You need to enable JavaScript to run Quickks.</noscript>
+  <div id="root"></div>
+  <script type="module" src="/src/index.jsx"></script>
 </body>
 </html>

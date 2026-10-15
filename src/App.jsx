@@ -1,11 +1,11 @@
-// src/App.jsx - v20 FINAL - SINGLE AnalyticsTracker - NO DUPLICATE
+// src/App.jsx - v23 FINAL - ProtectedRoute in routes/ + SINGLE AnalyticsTracker
 import React, { Suspense, lazy, useEffect } from 'react';
 import { Routes, Route, Navigate, Link, Outlet, useLocation } from 'react-router-dom';
 import { Toaster } from 'react-hot-toast';
 import { useAuth } from './contexts/AuthContext';
 import { PaymentProvider } from './contexts/PaymentContext';
-import ProtectedRoute from './components/ProtectedRoute';
-import AnalyticsTracker from './components/AnalyticsTracker'; // <-- ONLY ONE
+import ProtectedRoute from './routes/ProtectedRoute'; // <-- FIXED: routes madhe aahe
+import AnalyticsTracker from './components/AnalyticsTracker';
 import ErrorBoundary from './components/ErrorBoundary';
 import LoadingSpinner from './components/LoadingSpinner';
 import HomePage from './pages/HomePage';

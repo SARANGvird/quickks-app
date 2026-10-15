@@ -1,5 +1,5 @@
-// src/App.js - v15 PRODUCTION FINAL - SEO FIX
-import React, { Suspense, lazy, useEffect } from 'react';
+// src/App.jsx - v16 PRODUCTION FINAL - THROTTLING + SEO + DASHBOARD FIX
+import React, { Suspense, lazy, useEffect, useRef } from 'react';
 import {
   Routes,
   Route,
@@ -18,25 +18,45 @@ import LoadingSpinner from './components/LoadingSpinner';
 import HomePage from './pages/HomePage';
 
 const env = import.meta.env || {};
-const ERROR_ENDPOINT = env.VITE_ERROR_ENDPOINT || env.REACT_APP_ERROR_ENDPOINT || null;
-const RELEASE = env.VITE_VERSION || env.REACT_APP_VERSION || env.VITE_VERCEL_GIT_COMMIT_SHA || '1.0.0';
-
+const ERROR_ENDPOINT = env.VITE_ERROR_ENDPOINT || null;
+const RELEASE = env.VITE_VERSION || env.VITE_VERCEL_GIT_COMMIT_SHA || '1.0.0';
 const ADMIN_ROLES = ['ADMIN', 'SUPER_ADMIN'];
-const wait = ms => new Promise(resolve => setTimeout(resolve, ms));
 
+const wait = ms => new Promise(resolve => setTimeout(resolve, ms));
 const lazyWithRetry = (factory, { retries = 2, delay = 800 } = {}) =>
   lazy(async () => {
     let lastError;
-    for (let attempt = 0; attempt <= retries; attempt += 1) {
-      try {
-        return await factory();
-      } catch (error) {
-        lastError = error;
-        if (attempt < retries) await wait(delay * (attempt + 1));
-      }
+    for (let attempt = 0; attempt <= retries; attempt++) {
+      try { return await factory(); }
+      catch (e) { lastError = e; if (attempt < retries) await wait(delay * (attempt + 1)); }
     }
     throw lastError;
   });
+
+// --- FIX: AnalyticsTracker - No Throttling ---
+const AnalyticsTracker = () => {
+  const location = useLocation();
+  const lastPath = useRef('');
+  useEffect(() => {
+    const path = location.pathname + location.search;
+    if (lastPath.current === path) return;
+    lastPath.current = path;
+    if (window.gtag) {
+      window.gtag('event', 'page_view', {
+        page_path: path,
+        page_title: document.title,
+        page_location: window.location.href
+      });
+    }
+  }, [location]);
+  return null;
+};
+
+const ScrollToTop = () => {
+  const { pathname } = useLocation();
+  useEffect(() => { window.scrollTo(0, 0); }, [pathname]);
+  return null;
+};
 
 const LoginPage = lazyWithRetry(() => import('./pages/LoginPage'));
 const RegisterPage = lazyWithRetry(() => import('./pages/RegisterPage'));
@@ -50,8 +70,6 @@ const DashboardLandingPage = lazyWithRetry(() => import('./pages/DashboardLandin
 const BookingForm = lazyWithRetry(() => import('./components/BookingForm'));
 const PaymentSuccess = lazyWithRetry(() => import('./pages/PaymentSuccess'));
 const PaymentFailed = lazyWithRetry(() => import('./pages/PaymentFailed'));
-
-// ✅ FIX 1: Services Pages - SEO sathi add kele
 const ServicesPage = lazyWithRetry(() => import('./pages/ServicesPage'));
 const DynamicServicePage = lazyWithRetry(() => import('./pages/DynamicServicePage'));
 
@@ -72,43 +90,26 @@ const AdminAnalyticsPage = lazyWithRetry(() => import('./pages/Admin/Analytics')
 const AdminReviewsPage = lazyWithRetry(() => import('./pages/Admin/ReviewsPage'));
 const AdminSettingsPage = lazyWithRetry(() => import('./pages/Admin/SettingsPage'));
 
-const ScrollToTop = () => {
-  const { pathname } = useLocation();
-  useEffect(() => { window.scrollTo(0, 0); }, [pathname]);
-  return null;
-};
-
 const RouteErrorBoundary = ({ children }) => {
   const { pathname } = useLocation();
   return (
-    <ErrorBoundary
-      variant="page"
-      resetKeys={[pathname]}
-      release={RELEASE}
-      logToService={Boolean(ERROR_ENDPOINT)}
-      serviceEndpoint={ERROR_ENDPOINT}
-    >
+    <ErrorBoundary variant="page" resetKeys={[pathname]} release={RELEASE} logToService={Boolean(ERROR_ENDPOINT)} serviceEndpoint={ERROR_ENDPOINT}>
       {children}
     </ErrorBoundary>
   );
 };
 
 const AdminShell = () => (
-  <AdminLayout>
-    <Outlet />
-  </AdminLayout>
+  <AdminLayout><Outlet /></AdminLayout>
 );
-
 const LegacyAdminRedirect = () => {
   const { '*': rest } = useParams();
   const { search } = useLocation();
   return <Navigate to={`/admin/${rest || 'dashboard'}${search}`} replace />;
 };
-
 const Unauthorized = () => (
   <div style={{ textAlign: 'center', marginTop: 100, padding: 16 }}>
-    <h2>Access denied</h2>
-    <p>You do not have permission to view this page.</p>
+    <h2>Access denied</h2><p>You do not have permission to view this page.</p>
     <Link to="/">Go to Home</Link>{' | '}<Link to="/login">Sign in</Link>
   </div>
 );
@@ -118,6 +119,8 @@ const AppRoutes = () => {
   if (loading) return <LoadingSpinner fullScreen />;
   return (
     <Suspense fallback={<LoadingSpinner fullScreen />}>
+      <ScrollToTop />
+      <AnalyticsTracker />
       <Routes>
         <Route path="/" element={<HomePage />} />
         <Route path="/home" element={<HomePage />} />
@@ -128,14 +131,8 @@ const AppRoutes = () => {
         <Route path="/about" element={<AboutPage />} />
         <Route path="/contact" element={<ContactPage />} />
         <Route path="/support" element={<SupportPage />} />
-
-        {/* ✅ FIX 2: SERVICES ROUTES - Google 404 fix */}
         <Route path="/services" element={<ServicesPage />} />
         <Route path="/services/:serviceName" element={<DynamicServicePage />} />
-
-        {/* ✅ FIX 3: SEO SLUG ROUTES - electrician-in-kothrud */}
-        <Route path="/:slug" element={<DynamicServicePage />} />
-
         <Route path="/booking" element={<BookingForm />} />
         <Route path="/book" element={<BookingForm />} />
         <Route path="/unauthorized" element={<Unauthorized />} />
@@ -170,7 +167,8 @@ const AppRoutes = () => {
             <Route path="/admin/settings/*" element={<AdminSettingsPage />} />
           </Route>
         </Route>
-        {/* ✅ FIX 4: NotFound shevti thevla - adhi SEO routes check hotil */}
+        {/* SEO SLUG - MUST BE SECOND LAST */}
+        <Route path="/:slug" element={<DynamicServicePage />} />
         <Route path="*" element={<NotFoundPage />} />
       </Routes>
     </Suspense>
@@ -180,7 +178,6 @@ const AppRoutes = () => {
 const App = () => (
   <RouteErrorBoundary>
     <PaymentProvider>
-      <ScrollToTop />
       <AppRoutes />
       <Toaster position="top-right" toastOptions={{ duration: 4000, style: { background: '#363636', color: '#fff' } }} />
     </PaymentProvider>

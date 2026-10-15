@@ -3,74 +3,59 @@
 <head>
   <meta charset="UTF-8" />
   <meta name="viewport" content="width=device-width, initial-scale=1, maximum-scale=5" />
-  
-  <!-- Production CSP - Clean, No Vercel Debug -->
+
+  <!-- CSP - Prod Optimized - No Eval Abuse -->
   <meta http-equiv="Content-Security-Policy" content="
     default-src 'self';
     base-uri 'self';
     object-src 'none';
     form-action 'self' https://api.quickks.in https://api.razorpay.com;
-    script-src 'self' 'unsafe-inline' 'unsafe-eval' https://maps.googleapis.com https://maps.gstatic.com https://checkout.razorpay.com https://cdn.razorpay.com https://*.razorpay.com https://www.googletagmanager.com https://www.google-analytics.com https://www.google.com https://www.gstatic.com https://static.cloudflareinsights.com;
-    script-src-elem 'self' 'unsafe-inline' https://maps.googleapis.com https://maps.gstatic.com https://checkout.razorpay.com https://cdn.razorpay.com https://*.razorpay.com https://www.googletagmanager.com https://www.google-analytics.com https://www.google.com https://www.gstatic.com https://static.cloudflareinsights.com;
+    script-src 'self' 'unsafe-inline' https://maps.googleapis.com https://maps.gstatic.com https://checkout.razorpay.com https://cdn.razorpay.com https://*.razorpay.com https://www.googletagmanager.com https://www.google-analytics.com https://static.cloudflareinsights.com;
     style-src 'self' 'unsafe-inline' https://fonts.googleapis.com https://maps.googleapis.com;
     font-src 'self' data: https://fonts.gstatic.com https://fonts.googleapis.com;
-    img-src 'self' data: blob: https: https://images.unsplash.com https://*.unsplash.com https://*.openstreetmap.org https://*.googleapis.com https://*.gstatic.com https://*.razorpay.com https://www.googletagmanager.com https://www.google-analytics.com https://www.google.com https://www.quickks.in https://quickks.in;
-    connect-src 'self' https://api.quickks.in https://www.quickks.in https://quickks.in wss://api.quickks.in https://maps.googleapis.com https://maps.gstatic.com https://nominatim.openstreetmap.org https://*.razorpay.com https://api.razorpay.com https://lumberjack.razorpay.com https://lumberjack-cx.razorpay.com https://www.googletagmanager.com https://www.google-analytics.com https://www.google.com https://region1.google-analytics.com https://region1.analytics.google.com https://static.cloudflareinsights.com https://cloudflareinsights.com;
+    img-src 'self' data: blob: https: https://images.unsplash.com https://*.openstreetmap.org https://*.googleapis.com https://*.gstatic.com https://*.razorpay.com https://www.googletagmanager.com https://www.google-analytics.com;
+    connect-src 'self' https://api.quickks.in https://www.quickks.in wss://api.quickks.in https://maps.googleapis.com https://nominatim.openstreetmap.org https://*.razorpay.com https://api.razorpay.com https://www.googletagmanager.com https://www.google-analytics.com https://region1.google-analytics.com;
     frame-src 'self' https://api.razorpay.com https://*.razorpay.com https://checkout.razorpay.com;
     worker-src 'self' blob:;
-    media-src 'self' blob:;
-    upgrade-insecure-requests;
   ">
 
-  <!-- SEO -->
   <title>Quickks - Electrician, Plumber in Pune | Kothrud, Baner, Hadapsar</title>
   <meta name="description" content="Book verified electricians, plumbers, AC repair in Pune - Kothrud, Katraj, Baner, Hinjewadi, Wakad, Hadapsar. 60 min service, 24/7 support." />
   <meta name="robots" content="index, follow, max-image-preview:large" />
   <link rel="canonical" href="https://www.quickks.in/" />
 
-  <!-- Favicon -->
+  <!-- Favicon - Final -->
   <link rel="icon" type="image/x-icon" href="/favicon.ico" />
   <link rel="icon" type="image/png" sizes="32x32" href="/favicon-32x32.png" />
-  <link rel="apple-touch-icon" href="/apple-touch-icon.png" />
-  <link rel="manifest" href="/manifest.json" />
+  <link rel="apple-touch-icon" sizes="180x180" href="/apple-touch-icon.png" />
+  <link rel="manifest" href="/manifest.webmanifest" />
   <meta name="theme-color" content="#0f172a" />
 
-  <!-- OG -->
+  <!-- OG - Prod -->
   <meta property="og:type" content="website" />
   <meta property="og:url" content="https://www.quickks.in/" />
   <meta property="og:title" content="Quickks - Trusted Home Services in Pune" />
-  <meta property="og:description" content="Verified electricians & plumbers in Kothrud, Baner, Wakad, Hadapsar, Hinjewadi, Katraj. 4.8 rated." />
-  <meta property="og:image" content="https://www.quickks.in/og-image.png" />
+  <meta property="og:description" content="Verified electricians & plumbers in Pune. 4.8 rated, 60 min service." />
+  <meta property="og:image" content="https://www.quickks.in/logo192.png" />
 
-  <!-- Preconnect - Performance -->
+  <!-- Performance -->
   <link rel="preconnect" href="https://fonts.googleapis.com" />
   <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin />
   <link rel="preconnect" href="https://api.quickks.in" />
   <link rel="preconnect" href="https://checkout.razorpay.com" />
   <link rel="dns-prefetch" href="https://www.googletagmanager.com" />
-  <link rel="dns-prefetch" href="https://images.unsplash.com" />
 
-  <!-- GA4 -->
+  <!-- GA4 - FIXED: send_page_view false = NO Throttling -->
   <script async src="https://www.googletagmanager.com/gtag/js?id=G-ZC13NMTYY2"></script>
   <script>
     window.dataLayer = window.dataLayer || [];
     function gtag(){dataLayer.push(arguments);}
     gtag('js', new Date());
-    gtag('config', 'G-ZC13NMTYY2', { anonymize_ip: true, send_page_view: true });
-  </script>
-
-  <!-- Schema -->
-  <script type="application/ld+json">
-  {
-    "@context":"https://schema.org",
-    "@type":"LocalBusiness",
-    "name":"Quickks",
-    "url":"https://www.quickks.in",
-    "logo":"https://www.quickks.in/logo.png",
-    "description":"Trusted home services in Pune - Electrician, Plumber, AC Repair",
-    "areaServed":{"@type":"City","name":"Pune"},
-    "aggregateRating":{"@type":"AggregateRating","ratingValue":"4.8","reviewCount":"1250"}
-  }
+    gtag('config', 'G-ZC13NMTYY2', {
+      anonymize_ip: true,
+      send_page_view: false,
+      transport_type: 'beacon'
+    });
   </script>
 </head>
 <body>

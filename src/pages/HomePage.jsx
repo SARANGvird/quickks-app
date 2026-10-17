@@ -55,6 +55,15 @@ const isDebug = env.VITE_ENABLE_DEBUG_LOGS === "true";
 const log = (...a) => { if (isDebug) console.log("[HomePage]", ...a); };
 const logError = (...a) => { console.error("[HomePage]", ...a); };
 
+// Any saved or detected location matching this is ignored (covers Ambajogai / Ambejogai / Amabajogai spellings)
+const BLOCKED_LOCATION = /am+a?b[ae]?j?ogai/i;
+
+// 8452 -> "8.5K+", 8 -> "8+" (fixes "0.0K+" when the API returns a small number)
+const formatCount = (n) => {
+  const v = Number(n) || 0;
+  return v >= 1000 ? `${(v / 1000).toFixed(1)}K+` : `${v}+`;
+};
+
 const isValidEmail = (email) => /^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(email);
 
 const storage = {
@@ -192,7 +201,10 @@ export default function HomePage() {
   const featuresRef = useRef(null);
   const carouselRef = useRef(null);
 
-  const [location, setLocation] = useState(() => storage.get("local", LOCATION_KEY) || "");
+  const [location, setLocation] = useState(() => {
+    const saved = storage.get("local", LOCATION_KEY) || "";
+    return BLOCKED_LOCATION.test(saved) ? "" : saved;
+  });
   const [loadingLocation, setLoadingLocation] = useState(false);
   const [showLocationDialog, setShowLocationDialog] = useState(false);
   const [manualLocation, setManualLocation] = useState("");
@@ -298,6 +310,7 @@ export default function HomePage() {
   }, []);
 
   const saveLocation = useCallback((city) => {
+    if (BLOCKED_LOCATION.test(city)) return;
     setLocation(city);
     storage.set("local", LOCATION_KEY, city);
     showMessage(`Location set to ${city}`);
@@ -412,8 +425,8 @@ export default function HomePage() {
   const statsData = useMemo(() => {
     const placeholder = "–";
     return [
-      { value: isLoadingStats ? placeholder : `${(liveStats.totalCustomers / 1000).toFixed(1)}K+`, label: "Happy customers" },
-      { value: isLoadingStats ? placeholder : `${(liveStats.totalProviders / 1000).toFixed(1)}K+`, label: "Verified professionals" },
+      { value: isLoadingStats ? placeholder : formatCount(liveStats.totalCustomers), label: "Happy customers" },
+      { value: isLoadingStats ? placeholder : formatCount(liveStats.totalProviders), label: "Verified professionals" },
       { value: isLoadingStats ? placeholder : `${liveStats.averageRating}`, label: "Average rating", stars: true },
       { value: isLoadingStats ? placeholder : `${liveStats.satisfactionRate}%`, label: "Customer satisfaction" },
     ];
@@ -754,7 +767,7 @@ export default function HomePage() {
               <Panel sx={{ p: { xs: 2, md: 2.5 }, position: "relative" }}>
                 <Box sx={{ display: "flex", alignItems: "baseline", flexWrap: "wrap", gap: 1.5, mb: 2 }}>
                   <Typography component="h2" sx={{ fontSize: { xs: 20, md: 24 }, fontWeight: 700, fontFamily: FONT }}>
-                    Popular services{location ? ` in ${location}` : ""}
+                    Popular services
                   </Typography>
                   {(query || category !== "All") && <TextLink type="button" onClick={() => { setQuery(""); setCategory("All"); }}>Clear search</TextLink>}
                 </Box>

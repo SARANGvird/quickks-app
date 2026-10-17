@@ -5,7 +5,10 @@ import ErrorBoundary from "../components/ErrorBoundary";
 import { Helmet } from "react-helmet-async";
 import { homeService, API_BASE_URL } from "../api/api";
 import { FaWhatsapp } from "react-icons/fa";
-import { Zap, Wrench, Bolt, Settings, MapPin, ShieldCheck, ArrowRight, Menu, X, Star, Clock, CreditCard, Search, Phone, LocateFixed } from "lucide-react";
+import {
+  Zap, Wrench, Bolt, Settings, MapPin, ShieldCheck, ChevronRight, ChevronLeft, Menu, X, Star,
+  Clock, CreditCard, Search, Phone, LocateFixed, ChevronDown, User, ClipboardList
+} from "lucide-react";
 import {
   Box, Container, Typography, Button, Card, IconButton, Drawer, List, ListItemButton, ListItemText,
   Divider, useMediaQuery, useTheme, Alert, CircularProgress, TextField, Dialog, DialogTitle,
@@ -31,6 +34,7 @@ const C = {
   text: "#0F1111",
   muted: "#565959",
   link: "#007185",
+  linkHover: "#C7511F",
   yellow: "#FFD814",
   yellowHover: "#F7CA00",
   yellowBorder: "#FCD200",
@@ -38,12 +42,14 @@ const C = {
   price: "#B12704",
   border: "#D5D9D9",
   green: "#067D62",
+  red: "#CC0C39",
 };
 
 const FONT = '"Amazon Ember", "Segoe UI", Arial, sans-serif';
 const EXIT_KEY = "quickks_exit_shown";
 const LOCATION_KEY = "quickks_location";
 const DEFAULT_STATS = { totalCustomers: 8452, totalProviders: 1532, averageRating: 4.8, satisfactionRate: 99.9 };
+const HERO_INTERVAL = 6000;
 
 const isDebug = env.VITE_ENABLE_DEBUG_LOGS === "true";
 const log = (...a) => { if (isDebug) console.log("[HomePage]", ...a); };
@@ -60,6 +66,8 @@ const storage = {
   },
 };
 
+/* ---------- Styled primitives ---------- */
+
 const navStyle = {
   background: "none",
   border: "1px solid transparent",
@@ -71,6 +79,9 @@ const navStyle = {
   cursor: "pointer",
   textDecoration: "none",
   whiteSpace: "nowrap",
+  display: "inline-flex",
+  alignItems: "center",
+  gap: 4,
   "&:hover": { borderColor: "#fff" },
   "&:focus-visible": { outline: `2px solid ${C.orange}`, outlineOffset: 1 },
 };
@@ -108,8 +119,8 @@ const SecondaryButton = styled(Button)({
 
 const Panel = styled(Card)({
   background: "#fff",
-  border: `1px solid ${C.border}`,
-  borderRadius: 8,
+  border: "none",
+  borderRadius: 0,
   boxShadow: "none",
   fontFamily: FONT,
 });
@@ -124,11 +135,26 @@ const FloatingContactButton = styled(Fab)({
   "&:hover": { backgroundColor: "#1DA851" },
 });
 
+const TextLink = styled("button")({
+  background: "none",
+  border: "none",
+  padding: 0,
+  color: C.link,
+  cursor: "pointer",
+  fontSize: 14,
+  fontFamily: FONT,
+  textAlign: "left",
+  "&:hover": { textDecoration: "underline", color: C.linkHover },
+  "&:focus-visible": { outline: `2px solid ${C.link}`, outlineOffset: 2 },
+});
+
+/* ---------- Data ---------- */
+
 const DEFAULT_SERVICES = [
-  { id: 1, icon: <Zap size={40} color="#B45309" />, title: "Electrician", description: "Fans, wiring, switchboards and emergency fixes.", color: "#FEF3C7", popular: true },
-  { id: 2, icon: <Wrench size={40} color="#0E7490" />, title: "Appliance Repair", description: "Fridge, washing machine and other home appliances.", color: "#CFFAFE" },
-  { id: 3, icon: <Bolt size={40} color="#C2410C" />, title: "Power Backup", description: "Inverter and generator installation and maintenance.", color: "#FFEDD5" },
-  { id: 4, icon: <Settings size={40} color="#6D28D9" />, title: "Smart Home", description: "Smart devices, automation and premium setups.", color: "#EDE9FE" },
+  { id: 1, icon: <Zap size={44} color="#B45309" />, title: "Electrician", description: "Fans, wiring, switchboards and emergency fixes.", color: "#FEF3C7", popular: true },
+  { id: 2, icon: <Wrench size={44} color="#0E7490" />, title: "Appliance Repair", description: "Fridge, washing machine and other home appliances.", color: "#CFFAFE" },
+  { id: 3, icon: <Bolt size={44} color="#C2410C" />, title: "Power Backup", description: "Inverter and generator installation and maintenance.", color: "#FFEDD5" },
+  { id: 4, icon: <Settings size={44} color="#6D28D9" />, title: "Smart Home", description: "Smart devices, automation and premium setups.", color: "#EDE9FE" },
 ];
 
 const Footer = lazy(() => import("../components/Footer").catch(() => ({
@@ -152,15 +178,19 @@ function Stars({ value = 4.8, size = 16 }) {
   );
 }
 
+/* ---------- Page ---------- */
+
 export default function HomePage() {
   const { isAuthenticated, user } = useAuth();
   const navigate = useNavigate();
   const theme = useTheme();
   const isMobile = useMediaQuery(theme.breakpoints.down("md"));
+  const prefersReducedMotion = useMediaQuery("(prefers-reduced-motion: reduce)");
 
   const mountedRef = useRef(true);
   const servicesRef = useRef(null);
   const featuresRef = useRef(null);
+  const carouselRef = useRef(null);
 
   const [location, setLocation] = useState(() => storage.get("local", LOCATION_KEY) || "");
   const [loadingLocation, setLoadingLocation] = useState(false);
@@ -176,6 +206,9 @@ export default function HomePage() {
   const [services, setServices] = useState(DEFAULT_SERVICES);
   const [isLoadingServices, setIsLoadingServices] = useState(true);
   const [query, setQuery] = useState("");
+  const [category, setCategory] = useState("All");
+  const [heroIndex, setHeroIndex] = useState(0);
+  const [heroPaused, setHeroPaused] = useState(false);
 
   useEffect(() => {
     mountedRef.current = true;
@@ -183,6 +216,7 @@ export default function HomePage() {
     return () => { mountedRef.current = false; };
   }, []);
 
+  /* Exit intent */
   useEffect(() => {
     if (isAuthenticated || storage.get("session", EXIT_KEY)) return undefined;
     const onMouseLeave = (e) => {
@@ -196,6 +230,7 @@ export default function HomePage() {
     return () => document.removeEventListener("mouseleave", onMouseLeave);
   }, [isAuthenticated]);
 
+  /* Stats + popular services */
   useEffect(() => {
     const controller = new AbortController();
     const { signal } = controller;
@@ -305,8 +340,8 @@ export default function HomePage() {
   }, [manualLocation, saveLocation]);
 
   const scrollToSection = useCallback((ref) => {
-    ref?.current?.scrollIntoView({ behavior: "smooth", block: "start" });
-  }, []);
+    ref?.current?.scrollIntoView({ behavior: prefersReducedMotion ? "auto" : "smooth", block: "start" });
+  }, [prefersReducedMotion]);
 
   const handleWhatsApp = useCallback(() => {
     const text = encodeURIComponent(`Hi Quickks, I need help${location ? ` in ${location}` : ""}`);
@@ -339,6 +374,14 @@ export default function HomePage() {
     e.preventDefault();
     scrollToSection(servicesRef);
   }, [scrollToSection]);
+
+  const scrollCarousel = useCallback((dir) => {
+    const el = carouselRef.current;
+    if (!el) return;
+    el.scrollBy({ left: dir * el.clientWidth * 0.85, behavior: prefersReducedMotion ? "auto" : "smooth" });
+  }, [prefersReducedMotion]);
+
+  /* ---------- Derived ---------- */
 
   const cta = useMemo(() => {
     if (!isAuthenticated) return { label: "Get started free", action: () => navigate("/register") };
@@ -377,20 +420,39 @@ export default function HomePage() {
   }, [liveStats, isLoadingStats]);
 
   const navItems = useMemo(() => [
-    { label: "Services", ref: servicesRef },
+    { label: "Popular services", ref: servicesRef },
     { label: "Why Quickks", ref: featuresRef },
     { label: "About", to: "/about" },
     { label: "Contact", to: "/contact" },
   ], []);
 
+  const categories = useMemo(() => ["All", ...Array.from(new Set(services.map((s) => s.title)))], [services]);
+
   const visibleServices = useMemo(() => {
     const q = query.trim().toLowerCase();
-    if (!q) return services;
-    return services.filter((s) => `${s.title} ${s.description}`.toLowerCase().includes(q));
-  }, [services, query]);
+    return services.filter((s) => {
+      if (category !== "All" && s.title !== category) return false;
+      if (!q) return true;
+      return `${s.title} ${s.description}`.toLowerCase().includes(q);
+    });
+  }, [services, query, category]);
+
+  const heroSlides = useMemo(() => [
+    { title: "Trusted home services, at your door in 30 minutes", text: "Book verified electricians, appliance repair and more. See ratings, pay securely and get a satisfaction guarantee on every job.", from: "#232F3E", to: "#37475A" },
+    { title: "Get ₹100 off your first booking", text: "Create a free account today and save on your first service. Verified professionals, secure payment, no surprises.", from: "#0E4B5A", to: "#1F7A8C" },
+    { title: "Power cut? Appliance down? We are on it", text: "Emergency electrical fixes and appliance repair from nearby professionals who can reach you fast.", from: "#4A2C0A", to: "#9A5B13" },
+  ], []);
+
+  /* Hero auto-rotate (pauses on hover, respects reduced motion) */
+  useEffect(() => {
+    if (heroPaused || prefersReducedMotion) return undefined;
+    const t = setInterval(() => setHeroIndex((i) => (i + 1) % heroSlides.length), HERO_INTERVAL);
+    return () => clearInterval(t);
+  }, [heroPaused, prefersReducedMotion, heroSlides.length]);
 
   const greetingName = user?.name || user?.firstName || user?.fullName || "there";
   const closeSnackbar = () => setSnackbar((p) => ({ ...p, open: false }));
+  const slide = heroSlides[heroIndex];
 
   const jsonLd = JSON.stringify({
     "@context": "https://schema.org",
@@ -399,8 +461,10 @@ export default function HomePage() {
     url: "https://www.quickks.in/",
     telephone: CONTACT.PHONE_TEL,
     email: CONTACT.EMAIL,
-    areaServed: "Pune",
+    areaServed: location || "India",
   });
+
+  /* ---------- Header pieces ---------- */
 
   const locationBlock = (
     <Box
@@ -422,12 +486,26 @@ export default function HomePage() {
 
   const searchBar = (
     <Box component="form" onSubmit={handleSearch} role="search" sx={{ display: "flex", flex: 1, minWidth: 0, borderRadius: "6px", overflow: "hidden", bgcolor: "#fff", "&:focus-within": { boxShadow: `0 0 0 3px ${C.orange}` } }}>
+      {!isMobile && (
+        <Box sx={{ position: "relative", bgcolor: "#E6E6E6", borderRight: "1px solid #CDCDCD", display: "flex", alignItems: "center" }}>
+          <Box
+            component="select"
+            value={category}
+            onChange={(e) => setCategory(e.target.value)}
+            aria-label="Search category"
+            sx={{ appearance: "none", border: "none", outline: "none", bgcolor: "transparent", color: "#555", fontSize: 12, fontFamily: FONT, pl: 1.5, pr: 3, height: "100%", cursor: "pointer", maxWidth: 140 }}
+          >
+            {categories.map((c) => <option key={c} value={c}>{c}</option>)}
+          </Box>
+          <Box sx={{ position: "absolute", right: 8, pointerEvents: "none", display: "flex", color: "#555" }}><ChevronDown size={12} /></Box>
+        </Box>
+      )}
       <Box
         component="input"
         type="search"
         value={query}
         onChange={(e) => setQuery(e.target.value)}
-        placeholder="Search services, e.g. fan repair"
+        placeholder="Search Quickks, e.g. fan repair"
         aria-label="Search services"
         sx={{ flex: 1, minWidth: 0, border: "none", outline: "none", px: 1.5, py: 1.1, fontSize: 15, fontFamily: FONT, color: C.text }}
       />
@@ -437,13 +515,41 @@ export default function HomePage() {
     </Box>
   );
 
+  /* ---------- Reusable service card (carousel + grid) ---------- */
+
+  const ServiceCard = ({ s, compact = false }) => (
+    <Box sx={{ display: "flex", flexDirection: "column", height: "100%", p: compact ? 0 : 0 }}>
+      <Box sx={{ position: "relative", height: 150, bgcolor: s.color, display: "flex", alignItems: "center", justifyContent: "center", mb: 1.5 }}>
+        {s.icon}
+        {s.popular && (
+          <Box sx={{ position: "absolute", top: 8, left: 0, bgcolor: C.red, color: "#fff", fontSize: 12, fontWeight: 700, px: 1, py: 0.25, borderRadius: "0 2px 2px 0", fontFamily: FONT }}>Most booked</Box>
+        )}
+      </Box>
+      <Typography component="h3" sx={{ fontSize: 16, fontWeight: 500, lineHeight: 1.3, mb: 0.5, fontFamily: FONT, color: C.text }}>{s.title}</Typography>
+      <Box sx={{ display: "flex", alignItems: "center", gap: 0.75, mb: 0.5 }}>
+        <Typography sx={{ color: C.text, fontSize: 13, fontFamily: FONT }}>{s.rating || liveStats.averageRating}</Typography>
+        <Stars value={s.rating || liveStats.averageRating} size={14} />
+      </Box>
+      <Typography sx={{ color: C.muted, fontSize: 13, lineHeight: 1.45, mb: 1, flex: 1, fontFamily: FONT }}>{s.description}</Typography>
+      {s.price && (
+        <Typography sx={{ color: C.text, fontSize: 20, lineHeight: 1.1, mb: 0.5, fontFamily: FONT }}>
+          <Box component="span" sx={{ fontSize: 13, color: C.muted }}>From </Box>₹{s.price}
+        </Typography>
+      )}
+      <Typography sx={{ color: C.green, fontSize: 13, fontWeight: 600, mb: 1.5, fontFamily: FONT }}>Typical response: 30 minutes</Typography>
+      <PrimaryButton fullWidth onClick={bookAction}>Book now</PrimaryButton>
+    </Box>
+  );
+
+  /* ---------- Render ---------- */
+
   return (
     <ErrorBoundary>
       <Helmet>
-        <title>Quickks – Electrician, Appliance Repair and Home Services in Pune</title>
-        <meta name="description" content="Book verified electricians, appliance repair and home service experts in Pune. Fast response, secure payment and a satisfaction guarantee." />
+        <title>Quickks – Electrician, Appliance Repair and Home Services</title>
+        <meta name="description" content="Book verified electricians, appliance repair and home service experts near you. Fast response, secure payment and a satisfaction guarantee." />
         <link rel="canonical" href="https://www.quickks.in/" />
-        <meta property="og:title" content="Quickks – Trusted Home Services in Pune" />
+        <meta property="og:title" content="Quickks – Trusted Home Services" />
         <meta property="og:description" content="Verified professionals at your door, fast. Book electricians, appliance repair and more." />
         <meta property="og:url" content="https://www.quickks.in/" />
         <meta property="og:type" content="website" />
@@ -453,10 +559,11 @@ export default function HomePage() {
       <Box sx={{ minHeight: "100vh", bgcolor: C.bg, fontFamily: FONT, color: C.text, overflowX: "hidden" }}>
         <FloatingContactButton onClick={handleWhatsApp} aria-label="Chat on WhatsApp"><FaWhatsapp size={28} /></FloatingContactButton>
 
+        {/* ===== Header ===== */}
         <Box component="header" sx={{ position: "sticky", top: 0, zIndex: 1000 }}>
           <Box sx={{ bgcolor: C.header, py: 1 }}>
             <Container maxWidth="xl">
-              <Box sx={{ display: "flex", alignItems: "center", gap: { xs: 1, md: 2 }, flexWrap: { xs: "wrap", md: "nowrap" } }}>
+              <Box sx={{ display: "flex", alignItems: "center", gap: { xs: 1, md: 1.5 }, flexWrap: { xs: "wrap", md: "nowrap" } }}>
                 <Box component="button" type="button" onClick={() => navigate("/")} aria-label="Quickks home" sx={{ display: "flex", alignItems: "center", gap: 1, background: "none", border: "1px solid transparent", borderRadius: "2px", p: "4px 8px", cursor: "pointer", "&:hover": { borderColor: "#fff" }, "&:focus-visible": { outline: `2px solid ${C.orange}` } }}>
                   <Box component="img" src={QuickksLogo} alt="" sx={{ width: 36, height: 36, objectFit: "contain", bgcolor: "#fff", borderRadius: "8px", p: "4px" }} />
                   <Typography sx={{ fontWeight: 800, color: "#fff", fontSize: 22, letterSpacing: "-0.5px", fontFamily: FONT }}>Quickks<Box component="span" sx={{ color: C.orange }}>.</Box></Typography>
@@ -466,18 +573,27 @@ export default function HomePage() {
                 {!isMobile && searchBar}
 
                 {!isMobile && (
-                  <Box sx={{ display: "flex", alignItems: "center", gap: 1.5, ml: "auto" }}>
+                  <Box sx={{ display: "flex", alignItems: "center", gap: 0.5, ml: "auto" }}>
                     {isAuthenticated ? (
-                      <>
-                        <Typography sx={{ color: "#fff", fontSize: 14, fontFamily: FONT }}>Hello, {greetingName}</Typography>
-                        <PrimaryButton onClick={cta.action}>{cta.label}</PrimaryButton>
-                      </>
+                      <NavButton type="button" onClick={cta.action} aria-label={cta.label}>
+                        <Box component="span" sx={{ textAlign: "left", lineHeight: 1.2 }}>
+                          <Box component="span" sx={{ display: "block", fontSize: 12 }}>Hello, {greetingName}</Box>
+                          <Box component="span" sx={{ display: "block", fontSize: 14, fontWeight: 700 }}>{cta.label}</Box>
+                        </Box>
+                      </NavButton>
                     ) : (
-                      <>
-                        <NavButton type="button" onClick={() => navigate("/login")}>Sign in</NavButton>
-                        <PrimaryButton onClick={() => navigate("/register")}>Get started</PrimaryButton>
-                      </>
+                      <NavButton type="button" onClick={() => navigate("/login")} aria-label="Sign in">
+                        <Box component="span" sx={{ textAlign: "left", lineHeight: 1.2 }}>
+                          <Box component="span" sx={{ display: "block", fontSize: 12 }}>Hello, sign in</Box>
+                          <Box component="span" sx={{ display: "block", fontSize: 14, fontWeight: 700 }}>Account</Box>
+                        </Box>
+                      </NavButton>
                     )}
+                    <NavButton type="button" onClick={() => navigate(isAuthenticated ? "/customer/dashboard" : "/login")} aria-label="My bookings">
+                      <ClipboardList size={22} />
+                      <Box component="span" sx={{ fontWeight: 700 }}>Bookings</Box>
+                    </NavButton>
+                    {!isAuthenticated && <PrimaryButton onClick={() => navigate("/register")} sx={{ ml: 1 }}>Get started</PrimaryButton>}
                   </Box>
                 )}
 
@@ -494,6 +610,9 @@ export default function HomePage() {
             <Box sx={{ bgcolor: C.sub }}>
               <Container maxWidth="xl">
                 <Box sx={{ display: "flex", alignItems: "center", gap: 0.5, py: 0.5 }}>
+                  <NavButton type="button" onClick={() => setMobileMenuOpen(true)} aria-label="Open all menu" sx={{ fontWeight: 700 }}>
+                    <Menu size={18} /> All
+                  </NavButton>
                   {navItems.map((item) => (
                     item.to
                       ? <NavRouterLink key={item.label} to={item.to}>{item.label}</NavRouterLink>
@@ -501,7 +620,7 @@ export default function HomePage() {
                   ))}
                   <Box sx={{ ml: "auto" }}>
                     <NavRouterLink as="a" href={`tel:${CONTACT.PHONE_TEL}`} aria-label={`Call ${CONTACT.PHONE_DISPLAY}`}>
-                      <Box component="span" sx={{ display: "inline-flex", alignItems: "center", gap: 0.75 }}><Phone size={14} />{CONTACT.PHONE_DISPLAY}</Box>
+                      <Box component="span" sx={{ display: "inline-flex", alignItems: "center", gap: 0.75, fontWeight: 700 }}><Phone size={14} />{CONTACT.PHONE_DISPLAY}</Box>
                     </NavRouterLink>
                   </Box>
                 </Box>
@@ -510,9 +629,13 @@ export default function HomePage() {
           )}
         </Box>
 
-        <Drawer anchor="right" open={mobileMenuOpen} onClose={() => setMobileMenuOpen(false)} PaperProps={{ sx: { width: 300, bgcolor: "#fff", color: C.text } }}>
+        {/* ===== Mobile / All drawer ===== */}
+        <Drawer anchor={isMobile ? "right" : "left"} open={mobileMenuOpen} onClose={() => setMobileMenuOpen(false)} PaperProps={{ sx: { width: 300, bgcolor: "#fff", color: C.text } }}>
           <Box sx={{ bgcolor: C.sub, color: "#fff", p: 2, display: "flex", justifyContent: "space-between", alignItems: "center" }}>
-            <Typography sx={{ fontWeight: 700, fontFamily: FONT }}>{isAuthenticated ? `Hello, ${greetingName}` : "Welcome to Quickks"}</Typography>
+            <Box sx={{ display: "flex", alignItems: "center", gap: 1 }}>
+              <User size={20} />
+              <Typography sx={{ fontWeight: 700, fontFamily: FONT }}>{isAuthenticated ? `Hello, ${greetingName}` : "Hello, sign in"}</Typography>
+            </Box>
             <IconButton onClick={() => setMobileMenuOpen(false)} aria-label="Close menu" sx={{ color: "#fff" }}><X size={20} /></IconButton>
           </Box>
           <List>
@@ -541,114 +664,144 @@ export default function HomePage() {
         </Drawer>
 
         <Box component="main">
-          <Box sx={{ background: `linear-gradient(180deg, ${C.sub} 0%, ${C.slate} 55%, ${C.bg} 100%)`, pt: { xs: 5, md: 8 }, pb: { xs: 14, md: 18 } }}>
+          {/* ===== Hero carousel ===== */}
+          <Box
+            onMouseEnter={() => setHeroPaused(true)}
+            onMouseLeave={() => setHeroPaused(false)}
+            onFocus={() => setHeroPaused(true)}
+            onBlur={() => setHeroPaused(false)}
+            sx={{ position: "relative", background: `linear-gradient(180deg, ${slide.from} 0%, ${slide.to} 55%, ${C.bg} 100%)`, transition: prefersReducedMotion ? "none" : "background 0.6s", pt: { xs: 5, md: 8 }, pb: { xs: 22, md: 30 } }}
+          >
             <Container maxWidth="lg">
-              <Box sx={{ display: "grid", gridTemplateColumns: { xs: "1fr", md: "1.6fr 1fr" }, gap: 3, alignItems: "center" }}>
-                <Box>
-                  <Typography component="h1" sx={{ color: "#fff", fontWeight: 700, fontFamily: FONT, fontSize: { xs: "2rem", md: "3rem" }, lineHeight: 1.15, mb: 2 }}>
-                    Trusted home services, at your door in 30 minutes
-                  </Typography>
-                  <Typography sx={{ color: "#E3E6E6", fontSize: { xs: 16, md: 18 }, maxWidth: 560, mb: 3, lineHeight: 1.55, fontFamily: FONT }}>
-                    Book verified electricians, appliance repair and more. See ratings, pay securely and get a satisfaction guarantee on every job.
-                  </Typography>
-                  <Stack direction={{ xs: "column", sm: "row" }} spacing={1.5}>
-                    <PrimaryButton size="large" onClick={cta.action} endIcon={<ArrowRight size={18} />} sx={{ px: 4, py: 1.1, fontSize: 16 }}>{cta.label}</PrimaryButton>
-                    <SecondaryButton size="large" onClick={() => scrollToSection(servicesRef)} sx={{ px: 4, py: 1.1, fontSize: 16 }}>Browse services</SecondaryButton>
-                  </Stack>
-                </Box>
-
-                <Panel sx={{ p: 3 }}>
-                  {isAuthenticated ? (
-                    <>
-                      <Typography component="h2" sx={{ fontSize: 21, fontWeight: 700, mb: 1, fontFamily: FONT }}>Welcome back, {greetingName}</Typography>
-                      <Typography sx={{ color: C.muted, fontSize: 14, mb: 2, fontFamily: FONT }}>Pick up where you left off or book something new.</Typography>
-                      <PrimaryButton fullWidth onClick={cta.action}>{cta.label}</PrimaryButton>
-                    </>
-                  ) : (
-                    <>
-                      <Typography component="h2" sx={{ fontSize: 21, fontWeight: 700, mb: 1, fontFamily: FONT }}>Sign in for faster booking</Typography>
-                      <Typography sx={{ color: C.muted, fontSize: 14, mb: 2, fontFamily: FONT }}>Track your professional, save addresses and rebook in one tap.</Typography>
-                      <Stack spacing={1.25}>
-                        <PrimaryButton fullWidth onClick={() => navigate("/login")}>Sign in securely</PrimaryButton>
-                        <SecondaryButton fullWidth onClick={() => navigate("/register")}>Create your account</SecondaryButton>
-                      </Stack>
-                    </>
-                  )}
-                </Panel>
+              <Box aria-live="polite" sx={{ maxWidth: 680, px: { xs: 0, md: 6 } }}>
+                <Typography component="h1" sx={{ color: "#fff", fontWeight: 700, fontFamily: FONT, fontSize: { xs: "1.9rem", md: "2.9rem" }, lineHeight: 1.15, mb: 2 }}>
+                  {slide.title}
+                </Typography>
+                <Typography sx={{ color: "#E3E6E6", fontSize: { xs: 16, md: 18 }, mb: 3, lineHeight: 1.55, fontFamily: FONT }}>{slide.text}</Typography>
+                <Stack direction={{ xs: "column", sm: "row" }} spacing={1.5}>
+                  <PrimaryButton size="large" onClick={cta.action} sx={{ px: 4, py: 1.1, fontSize: 16 }}>{cta.label}</PrimaryButton>
+                  <SecondaryButton size="large" onClick={() => scrollToSection(servicesRef)} sx={{ px: 4, py: 1.1, fontSize: 16 }}>Browse services</SecondaryButton>
+                </Stack>
               </Box>
             </Container>
+
+            {!isMobile && (
+              <>
+                <IconButton onClick={() => setHeroIndex((i) => (i - 1 + heroSlides.length) % heroSlides.length)} aria-label="Previous slide" sx={{ position: "absolute", left: 8, top: "35%", color: "#fff", borderRadius: 1, height: 120, "&:hover": { bgcolor: "rgba(255,255,255,0.12)" } }}><ChevronLeft size={44} /></IconButton>
+                <IconButton onClick={() => setHeroIndex((i) => (i + 1) % heroSlides.length)} aria-label="Next slide" sx={{ position: "absolute", right: 8, top: "35%", color: "#fff", borderRadius: 1, height: 120, "&:hover": { bgcolor: "rgba(255,255,255,0.12)" } }}><ChevronRight size={44} /></IconButton>
+              </>
+            )}
+            <Box sx={{ position: "absolute", bottom: { xs: 150, md: 230 }, left: 0, right: 0, display: "flex", justifyContent: "center", gap: 1 }}>
+              {heroSlides.map((_, i) => (
+                <Box key={i} component="button" type="button" onClick={() => setHeroIndex(i)} aria-label={`Show slide ${i + 1}`} aria-current={i === heroIndex} sx={{ width: 10, height: 10, p: 0, borderRadius: "50%", border: "1px solid #fff", bgcolor: i === heroIndex ? "#fff" : "transparent", cursor: "pointer" }} />
+              ))}
+            </Box>
           </Box>
 
-          <Container maxWidth="lg" sx={{ mt: { xs: -10, md: -12 }, position: "relative", zIndex: 1 }}>
-            <Box sx={{ display: "grid", gridTemplateColumns: { xs: "repeat(2, 1fr)", md: "repeat(4, 1fr)" }, gap: 2 }}>
-              {statsData.map((stat) => (
-                <Panel key={stat.label} sx={{ p: 2.5, textAlign: "center" }}>
-                  <Typography sx={{ fontSize: { xs: 26, md: 32 }, fontWeight: 700, lineHeight: 1.1, fontFamily: FONT }}>{stat.value}</Typography>
-                  {stat.stars && !isLoadingStats && <Box sx={{ mt: 0.5 }}><Stars value={liveStats.averageRating} size={15} /></Box>}
-                  <Typography sx={{ color: C.muted, fontSize: 14, mt: 0.5, fontFamily: FONT }}>{stat.label}</Typography>
+          {/* ===== Overlapping quick-card row (Amazon signature) ===== */}
+          <Container maxWidth="xl" sx={{ mt: { xs: -18, md: -26 }, position: "relative", zIndex: 1 }}>
+            <Box sx={{ display: "grid", gridTemplateColumns: { xs: "1fr", sm: "repeat(2, 1fr)", lg: "repeat(4, 1fr)" }, gap: 2.5 }}>
+              {/* Sign-in / welcome card */}
+              <Panel sx={{ p: 2.5, display: "flex", flexDirection: "column" }}>
+                {isAuthenticated ? (
+                  <>
+                    <Typography component="h2" sx={{ fontSize: 21, fontWeight: 700, mb: 1, fontFamily: FONT }}>Welcome back, {greetingName}</Typography>
+                    <Typography sx={{ color: C.muted, fontSize: 14, mb: 2, flex: 1, fontFamily: FONT }}>Pick up where you left off or book something new.</Typography>
+                    <PrimaryButton fullWidth onClick={cta.action}>{cta.label}</PrimaryButton>
+                  </>
+                ) : (
+                  <>
+                    <Typography component="h2" sx={{ fontSize: 21, fontWeight: 700, mb: 1, fontFamily: FONT }}>Sign in for the best experience</Typography>
+                    <Typography sx={{ color: C.muted, fontSize: 14, mb: 2, flex: 1, fontFamily: FONT }}>Track your professional, save addresses and rebook in one tap.</Typography>
+                    <Stack spacing={1.25}>
+                      <PrimaryButton fullWidth onClick={() => navigate("/login")}>Sign in securely</PrimaryButton>
+                      <SecondaryButton fullWidth onClick={() => navigate("/register")}>Create your account</SecondaryButton>
+                    </Stack>
+                  </>
+                )}
+              </Panel>
+
+              {/* Three quick cards from the popular services */}
+              {services.slice(0, 3).map((s, idx) => (
+                <Panel key={`quick-${s.id || idx}`} sx={{ p: 2.5, display: "flex", flexDirection: "column" }}>
+                  <Typography component="h2" sx={{ fontSize: 21, fontWeight: 700, mb: 1.5, fontFamily: FONT }}>{s.title}</Typography>
+                  <Box sx={{ height: 150, bgcolor: s.color, display: "flex", alignItems: "center", justifyContent: "center", mb: 1.5 }}>{s.icon}</Box>
+                  <Typography sx={{ color: C.muted, fontSize: 13, mb: 1.5, flex: 1, fontFamily: FONT }}>{s.description}</Typography>
+                  <TextLink type="button" onClick={() => { setQuery(s.title); scrollToSection(servicesRef); }}>See availability</TextLink>
                 </Panel>
               ))}
             </Box>
           </Container>
 
-          <Box ref={servicesRef} id="services" sx={{ pt: { xs: 6, md: 8 }, scrollMarginTop: 130 }}>
-            <Container maxWidth="lg">
-              <Panel sx={{ p: { xs: 2, md: 3 } }}>
-                <Box sx={{ display: "flex", alignItems: "baseline", justifyContent: "space-between", flexWrap: "wrap", gap: 1, mb: 2.5 }}>
-                  <Typography component="h2" sx={{ fontSize: { xs: 22, md: 28 }, fontWeight: 700, fontFamily: FONT }}>
+          {/* ===== Stats strip ===== */}
+          <Container maxWidth="xl" sx={{ mt: 2.5 }}>
+            <Panel sx={{ p: 2 }}>
+              <Box sx={{ display: "grid", gridTemplateColumns: { xs: "repeat(2, 1fr)", md: "repeat(4, 1fr)" }, gap: 2 }}>
+                {statsData.map((stat) => (
+                  <Box key={stat.label} sx={{ textAlign: "center", py: 1 }}>
+                    <Typography sx={{ fontSize: { xs: 24, md: 30 }, fontWeight: 700, lineHeight: 1.1, fontFamily: FONT }}>{stat.value}</Typography>
+                    {stat.stars && !isLoadingStats && <Box sx={{ mt: 0.5 }}><Stars value={liveStats.averageRating} size={15} /></Box>}
+                    <Typography sx={{ color: C.muted, fontSize: 14, mt: 0.5, fontFamily: FONT }}>{stat.label}</Typography>
+                  </Box>
+                ))}
+              </Box>
+            </Panel>
+          </Container>
+
+          {/* ===== Popular services (carousel row) ===== */}
+          <Box ref={servicesRef} id="services" sx={{ pt: 2.5, scrollMarginTop: 130 }}>
+            <Container maxWidth="xl">
+              <Panel sx={{ p: { xs: 2, md: 2.5 }, position: "relative" }}>
+                <Box sx={{ display: "flex", alignItems: "baseline", flexWrap: "wrap", gap: 1.5, mb: 2 }}>
+                  <Typography component="h2" sx={{ fontSize: { xs: 20, md: 24 }, fontWeight: 700, fontFamily: FONT }}>
                     Popular services{location ? ` in ${location}` : ""}
                   </Typography>
-                  {query && (
-                    <Box component="button" type="button" onClick={() => setQuery("")} sx={{ background: "none", border: "none", color: C.link, cursor: "pointer", fontSize: 14, fontFamily: FONT, "&:hover": { textDecoration: "underline", color: "#C7511F" } }}>
-                      Clear search
-                    </Box>
-                  )}
+                  {(query || category !== "All") && <TextLink type="button" onClick={() => { setQuery(""); setCategory("All"); }}>Clear search</TextLink>}
                 </Box>
 
                 {isLoadingServices ? (
-                  <Box sx={{ display: "grid", gridTemplateColumns: { xs: "1fr", sm: "repeat(2, 1fr)", md: "repeat(4, 1fr)" }, gap: 2 }}>
-                    {[1, 2, 3, 4].map((i) => <Skeleton key={i} variant="rectangular" height={280} sx={{ borderRadius: 2 }} />)}
+                  <Box sx={{ display: "flex", gap: 2, overflow: "hidden" }}>
+                    {[1, 2, 3, 4, 5].map((i) => <Skeleton key={i} variant="rectangular" height={340} sx={{ flex: "0 0 220px" }} />)}
                   </Box>
                 ) : visibleServices.length === 0 ? (
                   <Box sx={{ py: 6, textAlign: "center" }}>
                     <Typography sx={{ fontSize: 18, fontWeight: 700, mb: 0.5, fontFamily: FONT }}>No services match “{query}”</Typography>
                     <Typography sx={{ color: C.muted, mb: 2, fontFamily: FONT }}>Check the spelling or search for a broader term like “electrician”.</Typography>
-                    <SecondaryButton onClick={() => setQuery("")}>Show all services</SecondaryButton>
+                    <SecondaryButton onClick={() => { setQuery(""); setCategory("All"); }}>Show all services</SecondaryButton>
                   </Box>
                 ) : (
-                  <Box sx={{ display: "grid", gridTemplateColumns: { xs: "1fr", sm: "repeat(2, 1fr)", md: "repeat(4, 1fr)" }, gap: 2 }}>
-                    {visibleServices.map((s, idx) => (
-                      <Panel key={s.id || idx} sx={{ p: 2, display: "flex", flexDirection: "column", height: "100%", "&:hover": { boxShadow: "0 2px 8px rgba(15,17,17,0.15)" } }}>
-                        <Box sx={{ position: "relative", height: 120, borderRadius: 1.5, bgcolor: s.color, display: "flex", alignItems: "center", justifyContent: "center", mb: 2 }}>
-                          {s.icon}
-                          {s.popular && (
-                            <Box sx={{ position: "absolute", top: 8, left: 8, bgcolor: "#CC0C39", color: "#fff", fontSize: 12, fontWeight: 700, px: 1, py: 0.25, borderRadius: "2px", fontFamily: FONT }}>Most booked</Box>
-                          )}
+                  <Box sx={{ position: "relative" }}>
+                    {!isMobile && (
+                      <IconButton onClick={() => scrollCarousel(-1)} aria-label="Scroll services left" sx={{ position: "absolute", left: -8, top: "35%", zIndex: 2, bgcolor: "#fff", border: `1px solid ${C.border}`, borderRadius: 1, boxShadow: "0 2px 5px rgba(0,0,0,0.2)", "&:hover": { bgcolor: "#F7FAFA" } }}><ChevronLeft size={28} /></IconButton>
+                    )}
+                    <Box
+                      ref={carouselRef}
+                      role="list"
+                      sx={{ display: "flex", gap: 2, overflowX: "auto", scrollSnapType: "x proximity", pb: 1, scrollbarWidth: "thin" }}
+                    >
+                      {visibleServices.map((s, idx) => (
+                        <Box key={s.id || idx} role="listitem" sx={{ flex: { xs: "0 0 70%", sm: "0 0 38%", md: "0 0 24%", lg: "0 0 19%" }, scrollSnapAlign: "start", minWidth: 200 }}>
+                          <ServiceCard s={s} />
                         </Box>
-                        <Typography component="h3" sx={{ fontSize: 18, fontWeight: 700, mb: 0.5, fontFamily: FONT }}>{s.title}</Typography>
-                        <Box sx={{ display: "flex", alignItems: "center", gap: 0.75, mb: 1 }}>
-                          <Stars value={s.rating || liveStats.averageRating} size={14} />
-                          <Typography sx={{ color: C.link, fontSize: 13, fontFamily: FONT }}>{s.rating || liveStats.averageRating}</Typography>
-                        </Box>
-                        <Typography sx={{ color: C.muted, fontSize: 14, lineHeight: 1.5, mb: 1.5, flex: 1, fontFamily: FONT }}>{s.description}</Typography>
-                        {s.price && <Typography sx={{ color: C.price, fontSize: 16, fontWeight: 700, mb: 0.5, fontFamily: FONT }}>From ₹{s.price}</Typography>}
-                        <Typography sx={{ color: C.green, fontSize: 13, fontWeight: 600, mb: 1.5, fontFamily: FONT }}>Typical response: 30 minutes</Typography>
-                        <PrimaryButton fullWidth onClick={bookAction}>Book now</PrimaryButton>
-                      </Panel>
-                    ))}
+                      ))}
+                    </Box>
+                    {!isMobile && (
+                      <IconButton onClick={() => scrollCarousel(1)} aria-label="Scroll services right" sx={{ position: "absolute", right: -8, top: "35%", zIndex: 2, bgcolor: "#fff", border: `1px solid ${C.border}`, borderRadius: 1, boxShadow: "0 2px 5px rgba(0,0,0,0.2)", "&:hover": { bgcolor: "#F7FAFA" } }}><ChevronRight size={28} /></IconButton>
+                    )}
                   </Box>
                 )}
               </Panel>
             </Container>
           </Box>
 
-          <Box ref={featuresRef} id="features" sx={{ pt: 3, scrollMarginTop: 130 }}>
-            <Container maxWidth="lg">
-              <Panel sx={{ p: { xs: 2, md: 3 } }}>
-                <Typography component="h2" sx={{ fontSize: { xs: 22, md: 28 }, fontWeight: 700, mb: 2.5, fontFamily: FONT }}>Why customers book with Quickks</Typography>
+          {/* ===== Why Quickks ===== */}
+          <Box ref={featuresRef} id="features" sx={{ pt: 2.5, scrollMarginTop: 130 }}>
+            <Container maxWidth="xl">
+              <Panel sx={{ p: { xs: 2, md: 2.5 } }}>
+                <Typography component="h2" sx={{ fontSize: { xs: 20, md: 24 }, fontWeight: 700, mb: 2, fontFamily: FONT }}>Why customers book with Quickks</Typography>
                 <Box sx={{ display: "grid", gridTemplateColumns: { xs: "1fr", sm: "repeat(2, 1fr)", md: "repeat(4, 1fr)" }, gap: 2 }}>
                   {features.map((f) => (
-                    <Box key={f.title} sx={{ p: 2, border: `1px solid ${C.border}`, borderRadius: 2 }}>
+                    <Box key={f.title} sx={{ p: 2, border: `1px solid ${C.border}`, borderRadius: "8px" }}>
                       <Box sx={{ mb: 1.5 }}>{f.icon}</Box>
                       <Typography component="h3" sx={{ fontSize: 17, fontWeight: 700, mb: 0.5, fontFamily: FONT }}>{f.title}</Typography>
                       <Typography sx={{ color: C.muted, fontSize: 14, lineHeight: 1.55, fontFamily: FONT }}>{f.description}</Typography>
@@ -659,10 +812,11 @@ export default function HomePage() {
             </Container>
           </Box>
 
-          <Box sx={{ pt: 3 }}>
-            <Container maxWidth="lg">
-              <Panel sx={{ p: { xs: 2, md: 3 } }}>
-                <Typography component="h2" sx={{ fontSize: { xs: 22, md: 28 }, fontWeight: 700, mb: 2.5, fontFamily: FONT }}>How it works</Typography>
+          {/* ===== How it works ===== */}
+          <Box sx={{ pt: 2.5 }}>
+            <Container maxWidth="xl">
+              <Panel sx={{ p: { xs: 2, md: 2.5 } }}>
+                <Typography component="h2" sx={{ fontSize: { xs: 20, md: 24 }, fontWeight: 700, mb: 2, fontFamily: FONT }}>How it works</Typography>
                 <Box component="ol" sx={{ listStyle: "none", m: 0, p: 0, display: "grid", gridTemplateColumns: { xs: "1fr", md: "repeat(3, 1fr)" }, gap: 2 }}>
                   {steps.map((s, i) => (
                     <Box component="li" key={s.title} sx={{ display: "flex", gap: 1.5, alignItems: "flex-start" }}>
@@ -678,10 +832,11 @@ export default function HomePage() {
             </Container>
           </Box>
 
-          <Box sx={{ py: 4 }}>
-            <Container maxWidth="lg">
-              <Panel sx={{ p: { xs: 2.5, md: 4 }, textAlign: "center" }}>
-                <Typography component="h2" sx={{ fontSize: { xs: 22, md: 28 }, fontWeight: 700, mb: 1, fontFamily: FONT }}>Ready to get it fixed?</Typography>
+          {/* ===== Bottom sign-in strip (Amazon "See personalized recommendations") ===== */}
+          <Box sx={{ py: 3 }}>
+            <Container maxWidth="xl">
+              <Panel sx={{ p: { xs: 2.5, md: 4 }, textAlign: "center", borderTop: `1px solid ${C.border}` }}>
+                <Typography component="h2" sx={{ fontSize: { xs: 20, md: 24 }, fontWeight: 700, mb: 1, fontFamily: FONT }}>Ready to get it fixed?</Typography>
                 <Typography sx={{ color: C.muted, mb: 2.5, fontFamily: FONT }}>
                   Questions before you book? Call <Box component="a" href={`tel:${CONTACT.PHONE_TEL}`} sx={{ color: C.link }}>{CONTACT.PHONE_DISPLAY}</Box> or write to <Box component="a" href={`mailto:${CONTACT.EMAIL}`} sx={{ color: C.link }}>{CONTACT.EMAIL}</Box>.
                 </Typography>
@@ -694,7 +849,8 @@ export default function HomePage() {
           </Box>
         </Box>
 
-        <Box component="button" type="button" onClick={() => window.scrollTo({ top: 0, behavior: "smooth" })} sx={{ display: "block", width: "100%", bgcolor: C.slate, color: "#fff", border: "none", py: 1.75, cursor: "pointer", fontSize: 13, fontFamily: FONT, "&:hover": { bgcolor: "#485769" }, "&:focus-visible": { outline: `2px solid ${C.orange}`, outlineOffset: -2 } }}>
+        {/* ===== Back to top + footer ===== */}
+        <Box component="button" type="button" onClick={() => window.scrollTo({ top: 0, behavior: prefersReducedMotion ? "auto" : "smooth" })} sx={{ display: "block", width: "100%", bgcolor: C.slate, color: "#fff", border: "none", py: 1.75, cursor: "pointer", fontSize: 13, fontFamily: FONT, "&:hover": { bgcolor: "#485769" }, "&:focus-visible": { outline: `2px solid ${C.orange}`, outlineOffset: -2 } }}>
           Back to top
         </Box>
 
@@ -702,6 +858,7 @@ export default function HomePage() {
           <Footer />
         </Suspense>
 
+        {/* ===== Dialogs ===== */}
         <Dialog open={showExitIntent && !isAuthenticated} onClose={() => setShowExitIntent(false)} maxWidth="xs" fullWidth PaperProps={{ sx: { borderRadius: 2 } }}>
           <DialogTitle sx={{ fontWeight: 700, fontFamily: FONT }}>Get ₹100 off your first booking</DialogTitle>
           <DialogContent>
@@ -734,7 +891,7 @@ export default function HomePage() {
             <TextField
               fullWidth
               label="City or area"
-              placeholder="For example, Kothrud, Pune"
+              placeholder="Enter your city or area"
               value={manualLocation}
               onChange={(e) => setManualLocation(e.target.value)}
               onKeyDown={(e) => { if (e.key === "Enter") handleLocationConfirm(); }}

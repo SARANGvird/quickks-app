@@ -1,10 +1,9 @@
 import { GoogleMap, DirectionsRenderer, Marker, InfoWindow, useJsApiLoader } from "@react-google-maps/api";
 import { useEffect, useState, useCallback, useMemo, useRef } from "react";
 import { Box, CircularProgress, Typography, Paper, Stack, Chip, Button, Alert, Snackbar } from "@mui/material";
-import { styled, alpha } from "@mui/material/styles";
+import { styled } from "@mui/material/styles";
 
-// Styled Components
-const MapContainer = styled(Box)(({ theme }) => ({
+const StyledMapWrapper = styled(Box)(() => ({
   position: "relative",
   width: "100%",
   height: "300px",
@@ -13,23 +12,18 @@ const MapContainer = styled(Box)(({ theme }) => ({
   backgroundColor: "#f0f2f5",
   boxShadow: "0 2px 8px rgba(0,0,0,0.1)",
   transition: "all 0.3s ease",
-  "&:hover": {
-    boxShadow: "0 4px 12px rgba(0,0,0,0.15)"
-  }
+  "&:hover": { boxShadow: "0 4px 12px rgba(0,0,0,0.15)" },
 }));
 
 const LoadingOverlay = styled(Box)({
   position: "absolute",
-  top: 0,
-  left: 0,
-  right: 0,
-  bottom: 0,
+  inset: 0,
   display: "flex",
   alignItems: "center",
   justifyContent: "center",
   backgroundColor: "rgba(255,255,255,0.9)",
   zIndex: 10,
-  backdropFilter: "blur(4px)"
+  backdropFilter: "blur(4px)",
 });
 
 const InfoCard = styled(Paper)({
@@ -42,88 +36,58 @@ const InfoCard = styled(Paper)({
   backdropFilter: "blur(8px)",
   borderRadius: "12px",
   zIndex: 5,
-  boxShadow: "0 4px 12px rgba(0,0,0,0.15)"
+  boxShadow: "0 4px 12px rgba(0,0,0,0.15)",
 });
 
-const LocationChip = styled(Chip)(({ theme }) => ({
-  margin: "4px",
-  fontWeight: 500,
-  "& .MuiChip-icon": {
-    fontSize: "16px"
-  }
-}));
-
-// Constants
-const MAP_LIBRARIES = ["places", "geometry", "directions"];
-const DEFAULT_CENTER = { lat: 20.5937, lng: 78.9629 }; // Center of India
+const LIBRARIES = ["places", "geometry"];
+const DEFAULT_CENTER = { lat: 20.5937, lng: 78.9629 };
 const DEFAULT_ZOOM = 12;
-const TRAVEL_MODES = {
-  DRIVING: window.google?.maps?.TravelMode?.DRIVING,
-  WALKING: window.google?.maps?.TravelMode?.WALKING,
-  BICYCLING: window.google?.maps?.TravelMode?.BICYCLING,
-  TRANSIT: window.google?.maps?.TravelMode?.TRANSIT
+
+const TRAVEL_MODE_MAP = {
+  DRIVING: "DRIVING",
+  WALKING: "WALKING",
+  BICYCLING: "BICYCLING",
+  TRANSIT: "TRANSIT",
+  driving: "DRIVING",
+  walking: "WALKING",
+  cycling: "BICYCLING",
+  bicycling: "BICYCLING",
+  transit: "TRANSIT",
 };
 
-// Helper function to parse location strings
-const parseLocation = (location) => {
-  if (!location) return null;
-  
-  // If it's already an object with lat/lng
-  if (typeof location === "object" && location.lat && location.lng) {
-    return location;
+const parseLocation = (loc) => {
+  if (!loc) return null;
+  if (typeof loc === "object" && typeof loc.lat === "number" && typeof loc.lng === "number") {
+    if (Number.isNaN(loc.lat) || Number.isNaN(loc.lng)) return null;
+    return { lat: loc.lat, lng: loc.lng };
   }
-  
-  // If it's a string with coordinates "lat,lng"
-  if (typeof location === "string" && location.includes(",")) {
-    const [lat, lng] = location.split(",").map(Number);
-    if (!isNaN(lat) && !isNaN(lng)) {
-      return { lat, lng };
-    }
+  if (typeof loc === "object" && loc.lat && loc.lng) {
+    const lat = Number(loc.lat);
+    const lng = Number(loc.lng);
+    if (!Number.isNaN(lat) && !Number.isNaN(lng)) return { lat, lng };
   }
-  
-  // If it's a place string (will be geocoded)
-  return location;
-};
-
-// Helper to format distance
-const formatDistance = (meters) => {
-  if (!meters) return "N/A";
-  if (meters < 1000) {
-    return `${Math.round(meters)} m`;
+  if (typeof loc === "string" && loc.includes(",")) {
+    const [a, b] = loc.split(",").map((v) => Number(v.trim()));
+    if (!Number.isNaN(a) && !Number.isNaN(b) && Math.abs(a) <= 90 && Math.abs(b) <= 180) return { lat: a, lng: b };
   }
-  return `${(meters / 1000).toFixed(1)} km`;
+  if (typeof loc === "string" && loc.trim().length > 3) return loc.trim();
+  return null;
 };
 
-// Helper to format duration
-const formatDuration = (seconds) => {
-  if (!seconds) return "N/A";
-  const hours = Math.floor(seconds / 3600);
-  const minutes = Math.floor((seconds % 3600) / 60);
-  
-  if (hours > 0) {
-    return `${hours}h ${minutes}m`;
-  }
-  return `${minutes} min`;
+const formatDistance = (m) => {
+  if (!m || Number.isNaN(m)) return "N/A";
+  return m < 1000 ? `${Math.round(m)} m` : `${(m / 1000).toFixed(1)} km`;
 };
 
-// Map Options
-const mapOptions = {
-  disableDefaultUI: false,
-  zoomControl: true,
-  mapTypeControl: false,
-  streetViewControl: false,
-  fullscreenControl: true,
-  styles: [
-    {
-      featureType: "poi",
-      elementType: "labels",
-      stylers: [{ visibility: "off" }]
-    }
-  ]
+const formatDuration = (s) => {
+  if (!s || Number.isNaN(s)) return "N/A";
+  const h = Math.floor(s / 3600);
+  const mm = Math.floor((s % 3600) / 60);
+  return h > 0 ? `${h}h ${mm}m` : `${mm} min`;
 };
 
-const LiveDirectionsMap = ({ 
-  providerLocation, 
+const LiveDirectionsMap = ({
+  providerLocation,
   customerLocation,
   travelMode = "DRIVING",
   showTraffic = false,
@@ -134,488 +98,219 @@ const LiveDirectionsMap = ({
   showInfoCard = true,
   autoFitBounds = true,
   className = "",
-  refreshInterval = null // For live updates (in milliseconds)
+  refreshInterval = null,
 }) => {
   const [directions, setDirections] = useState(null);
   const [routeInfo, setRouteInfo] = useState(null);
   const [error, setError] = useState(null);
   const [mapCenter, setMapCenter] = useState(DEFAULT_CENTER);
-  const [mapZoom, setMapZoom] = useState(DEFAULT_ZOOM);
   const [selectedMarker, setSelectedMarker] = useState(null);
   const [isGeocoding, setIsGeocoding] = useState(false);
-  const [geocodeError, setGeocodeError] = useState(null);
-  const [snackbarOpen, setSnackbarOpen] = useState(false);
-  const [snackbarMessage, setSnackbarMessage] = useState("");
-  const [snackbarSeverity, setSnackbarSeverity] = useState("info");
-  
+  const [snack, setSnack] = useState({ open: false, msg: "", severity: "info" });
+
   const mapRef = useRef(null);
   const directionsServiceRef = useRef(null);
   const geocoderRef = useRef(null);
-  const refreshTimerRef = useRef(null);
+  const timerRef = useRef(null);
+
+  const apiKey = process.env.REACT_APP_GOOGLE_MAPS_KEY || process.env.VITE_GOOGLE_MAPS_KEY || "";
 
   const { isLoaded, loadError } = useJsApiLoader({
-    googleMapsApiKey: process.env.REACT_APP_GOOGLE_MAPS_KEY,
-    libraries: MAP_LIBRARIES,
-    id: "google-map-script"
+    googleMapsApiKey: apiKey,
+    libraries: LIBRARIES,
+    id: "google-map-script-v50",
   });
 
-  // Parse and validate locations
-  const parsedProviderLocation = useMemo(() => {
-    if (!providerLocation) return null;
-    try {
-      return parseLocation(providerLocation);
-    } catch (err) {
-      console.error("Error parsing provider location:", err);
-      return null;
-    }
-  }, [providerLocation]);
+  const parsedProvider = useMemo(() => parseLocation(providerLocation), [providerLocation]);
+  const parsedCustomer = useMemo(() => parseLocation(customerLocation), [customerLocation]);
 
-  const parsedCustomerLocation = useMemo(() => {
-    if (!customerLocation) return null;
-    try {
-      return parseLocation(customerLocation);
-    } catch (err) {
-      console.error("Error parsing customer location:", err);
-      return null;
-    }
-  }, [customerLocation]);
+  const isCoord = (v) => v && typeof v === "object" && typeof v.lat === "number" && typeof v.lng === "number";
 
-  // Geocode address strings to coordinates
-  const geocodeAddress = useCallback(async (address) => {
-    if (!isLoaded || !geocoderRef.current) return null;
-    
+  const geocodeAddress = useCallback(async (addr) => {
+    if (!isLoaded || !geocoderRef.current || !addr || typeof addr !== "string") return null;
     setIsGeocoding(true);
-    setGeocodeError(null);
-    
     try {
-      const result = await new Promise((resolve, reject) => {
-        geocoderRef.current.geocode({ address }, (results, status) => {
-          if (status === "OK" && results && results[0]) {
-            resolve(results[0].geometry.location);
-          } else {
-            reject(new Error(`Geocoding failed: ${status}`));
-          }
+      const res = await new Promise((resolve, reject) => {
+        geocoderRef.current.geocode({ address: addr }, (r, s) => {
+          if (s === "OK" && r?.[0]) resolve(r[0].geometry.location);
+          else reject(new Error(s));
         });
       });
-      
-      return { lat: result.lat(), lng: result.lng() };
-    } catch (err) {
-      console.error("Geocoding error:", err);
-      setGeocodeError(`Could not find location: ${address}`);
+      return { lat: res.lat(), lng: res.lng() };
+    } catch {
       return null;
     } finally {
       setIsGeocoding(false);
     }
   }, [isLoaded]);
 
-  // Calculate directions
   const calculateDirections = useCallback(async () => {
-    if (!isLoaded || !directionsServiceRef.current) return;
-    
-    // Get coordinates for both locations
-    let originCoords = parsedProviderLocation;
-    let destCoords = parsedCustomerLocation;
-    
-    // Geocode if needed
-    if (originCoords && typeof originCoords === "string") {
-      originCoords = await geocodeAddress(originCoords);
+    if (!isLoaded || !directionsServiceRef.current || !window.google?.maps) return;
+    if (!parsedProvider || !parsedCustomer) return;
+
+    let origin = parsedProvider;
+    let dest = parsedCustomer;
+
+    if (typeof origin === "string") {
+      const g = await geocodeAddress(origin);
+      if (!g) { setError(`Provider location not found: ${origin}`); return; }
+      origin = g;
     }
-    if (destCoords && typeof destCoords === "string") {
-      destCoords = await geocodeAddress(destCoords);
+    if (typeof dest === "string") {
+      const g = await geocodeAddress(dest);
+      if (!g) { setError(`Customer location not found: ${dest}`); return; }
+      dest = g;
     }
-    
-    if (!originCoords || !destCoords) {
-      const errorMsg = "Invalid locations provided";
-      setError(errorMsg);
-      onError?.(errorMsg);
+
+    if (!isCoord(origin) || !isCoord(dest)) {
+      const msg = "Invalid coordinates";
+      setError(msg);
+      onError?.(msg);
       return;
     }
-    
-    // Set map center to midpoint
-    const midpoint = {
-      lat: (originCoords.lat + destCoords.lat) / 2,
-      lng: (originCoords.lng + destCoords.lng) / 2
-    };
-    setMapCenter(midpoint);
-    
-    const travelModeValue = TRAVEL_MODES[travelMode] || TRAVEL_MODES.DRIVING;
-    
-    const request = {
-      origin: originCoords,
-      destination: destCoords,
+
+    setMapCenter({ lat: (origin.lat + dest.lat) / 2, lng: (origin.lng + dest.lng) / 2 });
+
+    const modeKey = TRAVEL_MODE_MAP[travelMode] || "DRIVING";
+    const travelModeValue = window.google.maps.TravelMode[modeKey] || window.google.maps.TravelMode.DRIVING;
+
+    const req = {
+      origin,
+      destination: dest,
       travelMode: travelModeValue,
-      provideRouteAlternatives: true,
-      unitSystem: window.google.maps.UnitSystem.METRIC
+      provideRouteAlternatives: false,
+      unitSystem: window.google.maps.UnitSystem.METRIC,
     };
-    
-    if (showTraffic) {
-      request.drivingOptions = {
-        departureTime: new Date(),
-        trafficModel: "bestguess"
-      };
+
+    if (showTraffic && modeKey === "DRIVING") {
+      req.drivingOptions = { departureTime: new Date(), trafficModel: window.google.maps.TrafficModel.BEST_GUESS };
     }
-    
+
     try {
       const result = await new Promise((resolve, reject) => {
-        directionsServiceRef.current.route(request, (result, status) => {
-          if (status === "OK") {
-            resolve(result);
-          } else {
-            reject(new Error(`Directions request failed: ${status}`));
-          }
+        directionsServiceRef.current.route(req, (r, s) => {
+          if (s === "OK") resolve(r);
+          else reject(new Error(s));
         });
       });
-      
+
       setDirections(result);
-      
-      // Extract route information
-      const route = result.routes[0];
-      const leg = route.legs[0];
-      const routeInfoData = {
+      setError(null);
+
+      const leg = result.routes?.[0]?.legs?.[0];
+      if (!leg) return;
+
+      const info = {
         distance: leg.distance?.text || formatDistance(leg.distance?.value),
         distanceMeters: leg.distance?.value,
         duration: leg.duration?.text || formatDuration(leg.duration?.value),
         durationSeconds: leg.duration?.value,
-        durationInTraffic: leg.duration_in_traffic?.text,
+        durationInTraffic: leg.duration_in_traffic?.text || null,
         startAddress: leg.start_address,
         endAddress: leg.end_address,
-        steps: leg.steps?.length,
-        polyline: route.overview_polyline
+        steps: leg.steps?.length || 0,
       };
-      
-      setRouteInfo(routeInfoData);
-      onRouteCalculated?.(routeInfoData);
-      
-      // Auto-fit bounds if enabled
-      if (autoFitBounds && mapRef.current) {
-        const bounds = new window.google.maps.LatLngBounds();
-        bounds.extend(originCoords);
-        bounds.extend(destCoords);
-        mapRef.current.fitBounds(bounds);
-        setMapZoom(undefined); // Let map auto-calculate zoom
-      }
-      
-    } catch (err) {
-      console.error("Directions calculation error:", err);
-      const errorMsg = err.message || "Failed to calculate route";
-      setError(errorMsg);
-      onError?.(errorMsg);
-      setSnackbarMessage(errorMsg);
-      setSnackbarSeverity("error");
-      setSnackbarOpen(true);
-    }
-  }, [isLoaded, parsedProviderLocation, parsedCustomerLocation, travelMode, showTraffic, autoFitBounds, onRouteCalculated, onError, geocodeAddress]);
 
-  // Initialize services
+      setRouteInfo(info);
+      onRouteCalculated?.(info);
+
+      if (autoFitBounds && mapRef.current && window.google.maps.LatLngBounds) {
+        const bounds = new window.google.maps.LatLngBounds();
+        bounds.extend(origin);
+        bounds.extend(dest);
+        mapRef.current.fitBounds(bounds, 80);
+      }
+    } catch (e) {
+      const msg = e.message?.includes("ZERO_RESULTS") ? "No route found between locations" : `Route failed: ${e.message}`;
+      setError(msg);
+      onError?.(msg);
+      setSnack({ open: true, msg, severity: "error" });
+    }
+  }, [isLoaded, parsedProvider, parsedCustomer, travelMode, showTraffic, autoFitBounds, onRouteCalculated, onError, geocodeAddress]);
+
   useEffect(() => {
-    if (!isLoaded || loadError) return;
-    
-    if (!directionsServiceRef.current) {
-      directionsServiceRef.current = new window.google.maps.DirectionsService();
-    }
-    if (!geocoderRef.current) {
-      geocoderRef.current = new window.google.maps.Geocoder();
-    }
+    if (!isLoaded || loadError || !window.google?.maps) return;
+    if (!directionsServiceRef.current) directionsServiceRef.current = new window.google.maps.DirectionsService();
+    if (!geocoderRef.current) geocoderRef.current = new window.google.maps.Geocoder();
   }, [isLoaded, loadError]);
 
-  // Calculate route when locations change
   useEffect(() => {
-    if (isLoaded && parsedProviderLocation && parsedCustomerLocation) {
-      calculateDirections();
-    }
-  }, [isLoaded, parsedProviderLocation, parsedCustomerLocation, travelMode, showTraffic, calculateDirections]);
+    if (isLoaded && parsedProvider && parsedCustomer) calculateDirections();
+  }, [isLoaded, parsedProvider, parsedCustomer, calculateDirections]);
 
-  // Set up refresh interval for live updates
   useEffect(() => {
-    if (refreshInterval && refreshInterval > 0) {
-      refreshTimerRef.current = setInterval(() => {
-        calculateDirections();
-      }, refreshInterval);
-      
-      return () => {
-        if (refreshTimerRef.current) {
-          clearInterval(refreshTimerRef.current);
-        }
-      };
+    if (refreshInterval && refreshInterval > 5000) {
+      timerRef.current = setInterval(() => calculateDirections(), refreshInterval);
+      return () => { if (timerRef.current) clearInterval(timerRef.current); };
     }
   }, [refreshInterval, calculateDirections]);
 
-  // Handle map load
-  const onMapLoad = useCallback((map) => {
-    mapRef.current = map;
-  }, []);
+  useEffect(() => () => { if (timerRef.current) clearInterval(timerRef.current); }, []);
 
-  // Handle snackbar close
-  const handleSnackbarClose = () => {
-    setSnackbarOpen(false);
-  };
+  const onMapLoad = useCallback((m) => { mapRef.current = m; }, []);
 
-  // Custom markers icons
-  const providerMarkerIcon = useMemo(() => {
-    if (!isLoaded) return null;
-    return {
-      url: "https://maps.google.com/mapfiles/ms/icons/green-dot.png",
-      scaledSize: new window.google.maps.Size(40, 40),
-      labelOrigin: new window.google.maps.Point(20, 10)
-    };
-  }, [isLoaded]);
+  const mapOptions = useMemo(() => ({
+    disableDefaultUI: false,
+    zoomControl: true,
+    mapTypeControl: false,
+    streetViewControl: false,
+    fullscreenControl: true,
+    styles: [{ featureType: "poi", elementType: "labels", stylers: [{ visibility: "off" }] }],
+  }), []);
 
-  const customerMarkerIcon = useMemo(() => {
-    if (!isLoaded) return null;
-    return {
-      url: "https://maps.google.com/mapfiles/ms/icons/red-dot.png",
-      scaledSize: new window.google.maps.Size(40, 40),
-      labelOrigin: new window.google.maps.Point(20, 10)
-    };
-  }, [isLoaded]);
+  const providerCoords = isCoord(parsedProvider) ? parsedProvider : null;
+  const customerCoords = isCoord(parsedCustomer) ? parsedCustomer : null;
 
-  // Loading state
-  if (loadError) {
+  if (loadError || !apiKey) {
     return (
-      <MapContainer sx={{ height, width }}>
-        <LoadingOverlay>
-          <Alert severity="error" variant="filled">
-            Failed to load Google Maps. Please check your API key.
-          </Alert>
-        </LoadingOverlay>
-      </MapContainer>
+      <StyledMapWrapper sx={{ height, width }} className={className}>
+        <LoadingOverlay><Alert severity="error" variant="filled" sx={{ maxWidth: "90%" }}>{!apiKey ? "Google Maps API key missing. Set REACT_APP_GOOGLE_MAPS_KEY" : "Failed to load Google Maps. Check API key and billing."}</Alert></LoadingOverlay>
+      </StyledMapWrapper>
     );
   }
 
   if (!isLoaded || isGeocoding) {
     return (
-      <MapContainer sx={{ height, width }}>
-        <LoadingOverlay>
-          <Stack alignItems="center" spacing={2}>
-            <CircularProgress />
-            <Typography variant="body2" color="text.secondary">
-              {isGeocoding ? "Finding locations..." : "Loading map..."}
-            </Typography>
-          </Stack>
-        </LoadingOverlay>
-      </MapContainer>
+      <StyledMapWrapper sx={{ height, width }} className={className}>
+        <LoadingOverlay><Stack alignItems="center" spacing={2}><CircularProgress /><Typography variant="body2" color="text.secondary">{isGeocoding ? "Finding locations..." : "Loading map..."}</Typography></Stack></LoadingOverlay>
+      </StyledMapWrapper>
     );
   }
 
-  // Get coordinates for markers
-  const providerCoords = parsedProviderLocation && typeof parsedProviderLocation === "object" 
-    ? parsedProviderLocation 
-    : null;
-  const customerCoords = parsedCustomerLocation && typeof parsedCustomerLocation === "object"
-    ? parsedCustomerLocation
-    : null;
-
   return (
     <>
-      <MapContainer className={className} sx={{ height, width }}>
-        <GoogleMap
-          mapContainerStyle={{ width: "100%", height: "100%" }}
-          center={mapCenter}
-          zoom={mapZoom}
-          options={mapOptions}
-          onLoad={onMapLoad}
-        >
-          {/* Provider Marker */}
-          {providerCoords && (
-            <Marker
-              position={providerCoords}
-              icon={providerMarkerIcon}
-              label="P"
-              onClick={() => setSelectedMarker("provider")}
-            />
-          )}
-          
-          {/* Customer Marker */}
-          {customerCoords && (
-            <Marker
-              position={customerCoords}
-              icon={customerMarkerIcon}
-              label="C"
-              onClick={() => setSelectedMarker("customer")}
-            />
-          )}
-          
-          {/* Info Window for selected marker */}
+      <StyledMapWrapper className={className} sx={{ height, width }}>
+        <GoogleMap mapContainerStyle={{ width: "100%", height: "100%" }} center={mapCenter} zoom={DEFAULT_ZOOM} options={mapOptions} onLoad={onMapLoad}>
+          {providerCoords && <Marker position={providerCoords} label={{ text: "P", color: "white", fontWeight: "700" }} onClick={() => setSelectedMarker("provider")} />}
+          {customerCoords && <Marker position={customerCoords} label={{ text: "C", color: "white", fontWeight: "700" }} onClick={() => setSelectedMarker("customer")} />}
           {selectedMarker === "provider" && providerCoords && (
-            <InfoWindow
-              position={providerCoords}
-              onCloseClick={() => setSelectedMarker(null)}
-            >
-              <Box sx={{ p: 1 }}>
-                <Typography variant="subtitle2" fontWeight={600}>
-                  Provider Location
-                </Typography>
-                <Typography variant="caption" color="text.secondary">
-                  {typeof providerLocation === "string" 
-                    ? providerLocation 
-                    : `${providerCoords.lat.toFixed(6)}, ${providerCoords.lng.toFixed(6)}`}
-                </Typography>
-              </Box>
-            </InfoWindow>
+            <InfoWindow position={providerCoords} onCloseClick={() => setSelectedMarker(null)}><Box sx={{ p: 1 }}><Typography variant="subtitle2" fontWeight={700}>Provider</Typography><Typography variant="caption">{typeof providerLocation === "string" ? providerLocation : `${providerCoords.lat.toFixed(5)}, ${providerCoords.lng.toFixed(5)}`}</Typography></Box></InfoWindow>
           )}
-          
           {selectedMarker === "customer" && customerCoords && (
-            <InfoWindow
-              position={customerCoords}
-              onCloseClick={() => setSelectedMarker(null)}
-            >
-              <Box sx={{ p: 1 }}>
-                <Typography variant="subtitle2" fontWeight={600}>
-                  Customer Location
-                </Typography>
-                <Typography variant="caption" color="text.secondary">
-                  {typeof customerLocation === "string"
-                    ? customerLocation
-                    : `${customerCoords.lat.toFixed(6)}, ${customerCoords.lng.toFixed(6)}`}
-                </Typography>
-              </Box>
-            </InfoWindow>
+            <InfoWindow position={customerCoords} onCloseClick={() => setSelectedMarker(null)}><Box sx={{ p: 1 }}><Typography variant="subtitle2" fontWeight={700}>Customer</Typography><Typography variant="caption">{typeof customerLocation === "string" ? customerLocation : `${customerCoords.lat.toFixed(5)}, ${customerCoords.lng.toFixed(5)}`}</Typography></Box></InfoWindow>
           )}
-          
-          {/* Directions */}
-          {directions && (
-            <DirectionsRenderer
-              directions={directions}
-              options={{
-                polylineOptions: {
-                  strokeColor: "#4285F4",
-                  strokeWeight: 4,
-                  strokeOpacity: 0.8
-                },
-                suppressMarkers: true, // Use custom markers
-                preserveViewport: !autoFitBounds
-              }}
-            />
-          )}
+          {directions && <DirectionsRenderer directions={directions} options={{ polylineOptions: { strokeColor: "#4285F4", strokeWeight: 5, strokeOpacity: 0.85 }, suppressMarkers: true, preserveViewport: !autoFitBounds }} />}
         </GoogleMap>
-        
-        {/* Info Card */}
+
         {showInfoCard && routeInfo && (
-          <InfoCard elevation={2}>
+          <InfoCard elevation={3}>
             <Stack spacing={1}>
-              <Stack direction="row" spacing={2} justifyContent="space-between">
-                <Typography variant="body2" fontWeight={600}>
-                  Route Information
-                </Typography>
-                <Chip 
-                  label={travelMode} 
-                  size="small" 
-                  sx={{ bgcolor: alpha("#4285F4", 0.1), color: "#4285F4" }}
-                />
-              </Stack>
-              <Stack direction="row" spacing={2}>
-                <Box>
-                  <Typography variant="caption" color="text.secondary">
-                    Distance
-                  </Typography>
-                  <Typography variant="body2" fontWeight={500}>
-                    {routeInfo.distance}
-                  </Typography>
-                </Box>
-                <Box>
-                  <Typography variant="caption" color="text.secondary">
-                    Duration
-                  </Typography>
-                  <Typography variant="body2" fontWeight={500}>
-                    {routeInfo.duration}
-                  </Typography>
-                </Box>
-                {routeInfo.durationInTraffic && (
-                  <Box>
-                    <Typography variant="caption" color="text.secondary">
-                      In Traffic
-                    </Typography>
-                    <Typography variant="body2" fontWeight={500} color="warning.main">
-                      {routeInfo.durationInTraffic}
-                    </Typography>
-                  </Box>
-                )}
-              </Stack>
-              <Stack direction="row" spacing={1} flexWrap="wrap">
-                <LocationChip
-                  size="small"
-                  icon={<Box sx={{ width: 8, height: 8, bgcolor: "green", borderRadius: "50%" }} />}
-                  label={routeInfo.startAddress?.split(",")[0] || "Provider"}
-                  variant="outlined"
-                />
-                <LocationChip
-                  size="small"
-                  icon={<Box sx={{ width: 8, height: 8, bgcolor: "red", borderRadius: "50%" }} />}
-                  label={routeInfo.endAddress?.split(",")[0] || "Customer"}
-                  variant="outlined"
-                />
-              </Stack>
+              <Stack direction="row" justifyContent="space-between" alignItems="center"><Typography variant="body2" fontWeight={700}>Route</Typography><Chip label={TRAVEL_MODE_MAP[travelMode] || travelMode} size="small" color="primary" variant="outlined" /></Stack>
+              <Stack direction="row" spacing={2}><Box><Typography variant="caption" color="text.secondary">Distance</Typography><Typography variant="body2" fontWeight={600}>{routeInfo.distance}</Typography></Box><Box><Typography variant="caption" color="text.secondary">Duration</Typography><Typography variant="body2" fontWeight={600}>{routeInfo.duration}</Typography></Box>{routeInfo.durationInTraffic && <Box><Typography variant="caption" color="text.secondary">Traffic</Typography><Typography variant="body2" fontWeight={600} color="warning.main">{routeInfo.durationInTraffic}</Typography></Box>}</Stack>
             </Stack>
           </InfoCard>
         )}
-        
-        {/* Error Overlay */}
+
         {error && (
-          <LoadingOverlay>
-            <Alert severity="error" variant="filled" sx={{ maxWidth: "80%" }}>
-              {error}
-              <Button 
-                size="small" 
-                color="inherit" 
-                onClick={calculateDirections}
-                sx={{ mt: 1 }}
-              >
-                Retry
-              </Button>
-            </Alert>
-          </LoadingOverlay>
+          <LoadingOverlay><Alert severity="error" variant="filled" sx={{ maxWidth: "85%" }} action={<Button size="small" color="inherit" onClick={() => { setError(null); calculateDirections(); }}>Retry</Button>}>{error}</Alert></LoadingOverlay>
         )}
-      </MapContainer>
-      
-      {/* Snackbar for errors */}
-      <Snackbar
-        open={snackbarOpen}
-        autoHideDuration={6000}
-        onClose={handleSnackbarClose}
-        anchorOrigin={{ vertical: "bottom", horizontal: "center" }}
-      >
-        <Alert 
-          onClose={handleSnackbarClose} 
-          severity={snackbarSeverity}
-          variant="filled"
-        >
-          {snackbarMessage}
-        </Alert>
+      </StyledMapWrapper>
+
+      <Snackbar open={snack.open} autoHideDuration={5000} onClose={() => setSnack((s) => ({ ...s, open: false }))} anchorOrigin={{ vertical: "bottom", horizontal: "center" }}>
+        <Alert onClose={() => setSnack((s) => ({ ...s, open: false }))} severity={snack.severity} variant="filled">{snack.msg}</Alert>
       </Snackbar>
     </>
   );
-};
-
-// PropTypes for better documentation
-LiveDirectionsMap.propTypes = {
-  providerLocation: PropTypes.oneOfType([
-    PropTypes.shape({ lat: PropTypes.number, lng: PropTypes.number }),
-    PropTypes.string
-  ]).isRequired,
-  customerLocation: PropTypes.oneOfType([
-    PropTypes.shape({ lat: PropTypes.number, lng: PropTypes.number }),
-    PropTypes.string
-  ]).isRequired,
-  travelMode: PropTypes.oneOf(["DRIVING", "WALKING", "BICYCLING", "TRANSIT"]),
-  showTraffic: PropTypes.bool,
-  onRouteCalculated: PropTypes.func,
-  onError: PropTypes.func,
-  height: PropTypes.string,
-  width: PropTypes.string,
-  showInfoCard: PropTypes.bool,
-  autoFitBounds: PropTypes.bool,
-  className: PropTypes.string,
-  refreshInterval: PropTypes.number
-};
-
-LiveDirectionsMap.defaultProps = {
-  travelMode: "DRIVING",
-  showTraffic: false,
-  height: "300px",
-  width: "100%",
-  showInfoCard: true,
-  autoFitBounds: true,
-  className: ""
 };
 
 export default LiveDirectionsMap;

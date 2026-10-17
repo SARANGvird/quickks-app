@@ -362,7 +362,7 @@ export default function HomePage() {
         <Box ref={servicesRef} sx={{ bgcolor: "white", py: { xs: 8, md: 14 } }}>
           <Container maxWidth="lg">
             <Box sx={{ textAlign: "center", mb: 8 }}><Typography variant="h2" sx={{ fontWeight: 900, color: "#020617", mb: 2, fontSize: { xs: "2rem", md: "3rem" } }}>Services at Your Doorstep</Typography></Box>
-            {isLoadingServices? <Grid container spacing={4}>{[1, 2, 3, 4].map((i) => <Grid item xs={12} sm={6} md={3} key={i}><Skeleton variant="rectangular" height={250} sx={{ borderRadius: 4 }} /></Grid>)}</Grid> : (
+            {isLoadingServices? <Grid container spacing={4}>{[F1, 2, 3, 4].map((i) => <Grid item xs={12} sm={6} md={3} key={i}><Skeleton variant="rectangular" height={250} sx={{ borderRadius: 4 }} /></Grid>)}</Grid> : (
               <Grid container spacing={4}>{services.map((s, idx) => (<Grid item xs={12} sm={6} md={3} key={s.id || idx}><ServiceCard color={s.color}><CardContent sx={{ p: 0, flex: 1, display: "flex", flexDirection: "column" }}><Box sx={{ width: 80, height: 80, borderRadius: 4, bgcolor: `${s.color}14`, display: "flex", alignItems: "center", justifyContent: "center", mb: 2.5 }}>{s.icon}</Box><Typography variant="h6" sx={{ fontWeight: 800, color: "#020617", mb: 1 }}>{s.title}</Typography><Typography variant="body2" sx={{ color: "#64748b", mb: 3, flex: 1 }}>{s.description}</Typography><Button variant="contained" onClick={() => navigate("/register")} endIcon={<ArrowRight size={16} />} sx={{ bgcolor: "#020617", color: "white", borderRadius: 3, textTransform: "none" }}>Book Now</Button></CardContent></ServiceCard></Grid>))}</Grid>
             )}
           </Container>

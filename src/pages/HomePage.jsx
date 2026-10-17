@@ -1,384 +1,754 @@
-// src/pages/HomePage.jsx - v39 FINAL PRODUCTION - SENIOR REALTIME - NO 500
 import React, { useEffect, useState, useCallback, useRef, lazy, Suspense, useMemo } from "react";
 import { useNavigate, Link } from "react-router-dom";
 import { useAuth } from "../contexts/AuthContext";
-import { motion, AnimatePresence } from "framer-motion";
 import ErrorBoundary from "../components/ErrorBoundary";
 import { Helmet } from "react-helmet-async";
-import { homeService, API_BASE_URL, API_ORIGIN } from "../api/api";
+import { homeService, API_BASE_URL } from "../api/api";
 import { FaWhatsapp } from "react-icons/fa";
-import { Zap, Wrench, Bolt, Settings, LogIn, UserPlus, MapPin, ShieldCheck, ArrowRight, Menu, X, Star, Clock, CreditCard } from "lucide-react";
+import { Zap, Wrench, Bolt, Settings, MapPin, ShieldCheck, ArrowRight, Menu, X, Star, Clock, CreditCard, Search, Phone, LocateFixed } from "lucide-react";
 import {
-  Box, Container, Typography, Button, Grid, Card, CardContent, Chip, IconButton,
-  Drawer, List, ListItem, ListItemText, Divider, useMediaQuery, useTheme, Alert,
-  CircularProgress, TextField, Dialog, DialogTitle, DialogContent, DialogActions, Snackbar, Stack, Paper, Fab, Skeleton
+  Box, Container, Typography, Button, Card, IconButton, Drawer, List, ListItemButton, ListItemText,
+  Divider, useMediaQuery, useTheme, Alert, CircularProgress, TextField, Dialog, DialogTitle,
+  DialogContent, DialogActions, Snackbar, Stack, Fab, Skeleton
 } from "@mui/material";
-import { styled, keyframes } from "@mui/material/styles";
+import { styled } from "@mui/material/styles";
 import QuickksLogo from "../assets/quickks-logo.png";
 
-// ---------- CONSTANTS ----------
 const env = import.meta.env || {};
+
 const CONTACT = {
   PHONE_DISPLAY: env.VITE_SUPPORT_PHONE_DISPLAY || "+91 93713 65677",
   PHONE_TEL: env.VITE_SUPPORT_PHONE_TEL || "+919371365677",
   WHATSAPP_NUMBER: env.VITE_WHATSAPP_NUMBER || "919371365677",
   EMAIL: env.VITE_SUPPORT_EMAIL || "support@quickks.com",
 };
-const isDebug = env.VITE_ENABLE_DEBUG_LOGS === 'true';
-const log = (...a) => { if (isDebug) console.log('[HomePage]',...a); };
-const logError = (...a) => { console.error('[HomePage]',...a); };
+
+const C = {
+  header: "#131921",
+  sub: "#232F3E",
+  slate: "#37475A",
+  bg: "#EAEDED",
+  text: "#0F1111",
+  muted: "#565959",
+  link: "#007185",
+  yellow: "#FFD814",
+  yellowHover: "#F7CA00",
+  yellowBorder: "#FCD200",
+  orange: "#FFA41C",
+  price: "#B12704",
+  border: "#D5D9D9",
+  green: "#067D62",
+};
+
+const FONT = '"Amazon Ember", "Segoe UI", Arial, sans-serif';
+const EXIT_KEY = "quickks_exit_shown";
+const LOCATION_KEY = "quickks_location";
+const DEFAULT_STATS = { totalCustomers: 8452, totalProviders: 1532, averageRating: 4.8, satisfactionRate: 99.9 };
+
+const isDebug = env.VITE_ENABLE_DEBUG_LOGS === "true";
+const log = (...a) => { if (isDebug) console.log("[HomePage]", ...a); };
+const logError = (...a) => { console.error("[HomePage]", ...a); };
 
 const isValidEmail = (email) => /^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(email);
 
-// ---------- ANIMATIONS ----------
-const floatAnim = keyframes`0%{transform:translateY(0)}50%{transform:translateY(-12px)}100%{transform:translateY(0)}`;
-const shimmerAnim = keyframes`0%{background-position:-200% center}100%{background-position:200% center}`;
-const pulseGlow = keyframes`0%{box-shadow:0 0 0 0 rgba(251,191,36,0.4)}70%{box-shadow:0 0 0 20px rgba(251,191,36,0)}100%{box-shadow:0 0 0 0 rgba(251,191,36,0)}`;
+const storage = {
+  get(kind, key) {
+    try { return (kind === "session" ? sessionStorage : localStorage).getItem(key); } catch { return null; }
+  },
+  set(kind, key, value) {
+    try { (kind === "session" ? sessionStorage : localStorage).setItem(key, value); } catch { return; }
+  },
+};
 
-// ---------- STYLED ----------
-const HeroSection = styled(Box)({ position: "relative", minHeight: "100vh", display: "flex", alignItems: "center", justifyContent: "center", background: "radial-gradient(1200px 600px at 50% -10%, rgba(120,119,198,0.25), transparent), radial-gradient(800px 500px at 20% 10%, rgba(251,191,36,0.15), transparent), linear-gradient(135deg, #020617 0%, #0f172a 50%, #020617 100%)", overflow: "hidden" });
-const GradientText = styled(Typography)({ background: "linear-gradient(100deg, #fff 0%, #fbbf24 20%, #f59e0b 50%, #f97316 80%, #fff 100%)", WebkitBackgroundClip: "text", WebkitTextFillColor: "transparent", backgroundClip: "text", backgroundSize: "200% auto", animation: `${shimmerAnim} 4s ease-in-out infinite` });
-const GlassNav = styled(Box)({ position: "fixed", left: 0, right: 0, top: 0, zIndex: 1000, backdropFilter: "blur(24px)", backgroundColor: "rgba(2, 6, 23, 0.8)", borderBottom: "1px solid rgba(255,255,255,0.06)", padding: "14px 0", transition: "all 0.3s ease" });
-const FeatureCard = styled(Card)(({ theme }) => ({ padding: theme.spacing(4), borderRadius: theme.spacing(3), transition: "all 0.5s cubic-bezier(0.4, 0, 0.2, 1)", height: "100%", display: "flex", flexDirection: "column", alignItems: "center", textAlign: "center", background: "rgba(255,255,255,0.03)", backdropFilter: "blur(12px)", border: "1px solid rgba(255,255,255,0.06)", "&:hover": { transform: "translateY(-12px) scale(1.02)", boxShadow: "0 30px 60px rgba(0,0,0,0.4), 0 0 0 1px rgba(251, 191, 36, 0.2)", borderColor: "rgba(251, 191, 36, 0.3)" } }));
-const ServiceCard = styled(Card)(({ color = "#fbbf24" }) => ({ padding: "32px", borderRadius: "28px", transition: "all 0.5s", cursor: "pointer", position: "relative", overflow: "hidden", height: "100%", display: "flex", flexDirection: "column", background: "white", border: "1px solid rgba(0,0,0,0.04)", "&::before": { content: '""', position: "absolute", top: 0, left: 0, right: 0, height: 4, background: `linear-gradient(90deg, ${color}, ${color}dd)` }, "&:hover": { transform: "translateY(-10px)", boxShadow: "0 24px 48px rgba(0,0,0,0.12)" } }));
-const StatsCard = styled(Paper)({ padding: "20px 24px", borderRadius: "20px", background: "rgba(255,255,255,0.04)", border: "1px solid rgba(255,255,255,0.07)", backdropFilter: "blur(16px)", textAlign: "center", transition: "all 0.4s ease", "&:hover": { background: "rgba(255,255,255,0.08)", transform: "translateY(-4px) scale(1.03)" } });
-const CTASection = styled(Box)(({ theme }) => ({ position: "relative", padding: theme.spacing(12, 0), background: "radial-gradient(800px 400px at 50% 0%, rgba(251,191,36,0.15), transparent), linear-gradient(135deg, #020617 0%, #0f172a 50%, #020617 100%)", overflow: "hidden", borderTop: "1px solid rgba(255,255,255,0.05)" }));
-const LogoImg = styled("img")({ width: 48, height: 48, objectFit: "contain", background: "#ffffff", borderRadius: 14, padding: 7, boxShadow: "0 8px 24px rgba(0,0,0,0.3)" });
-const HeroLogo = styled("img")({ width: 140, height: 140, objectFit: "contain", background: "#ffffff", borderRadius: 32, padding: 18, boxShadow: "0 20px 60px rgba(251,191,36,0.3)", animation: `${floatAnim} 4s ease-in-out infinite, ${pulseGlow} 3s ease-in-out infinite` });
-const FloatingContactButton = styled(Fab)({ position: "fixed", bottom: 24, right: 24, zIndex: 999, backgroundColor: "#25D366", color: "white", boxShadow: "0 8px 24px rgba(37,211,102,0.4)", "&:hover": { backgroundColor: "#1DA851", transform: "scale(1.05)" } });
+const navStyle = {
+  background: "none",
+  border: "1px solid transparent",
+  color: "#fff",
+  font: "inherit",
+  fontSize: 14,
+  padding: "6px 10px",
+  borderRadius: 2,
+  cursor: "pointer",
+  textDecoration: "none",
+  whiteSpace: "nowrap",
+  "&:hover": { borderColor: "#fff" },
+  "&:focus-visible": { outline: `2px solid ${C.orange}`, outlineOffset: 1 },
+};
+const NavButton = styled("button")(navStyle);
+const NavRouterLink = styled(Link)(navStyle);
+
+const PrimaryButton = styled(Button)({
+  background: C.yellow,
+  color: C.text,
+  border: `1px solid ${C.yellowBorder}`,
+  borderRadius: 999,
+  textTransform: "none",
+  fontWeight: 500,
+  fontFamily: FONT,
+  boxShadow: "none",
+  padding: "6px 20px",
+  "&:hover": { background: C.yellowHover, boxShadow: "none" },
+  "&:focus-visible": { outline: `2px solid ${C.link}`, outlineOffset: 2 },
+  "&.Mui-disabled": { background: "#F0F2F2", color: "#8D9096", borderColor: C.border },
+});
+
+const SecondaryButton = styled(Button)({
+  background: "#fff",
+  color: C.text,
+  border: `1px solid ${C.border}`,
+  borderRadius: 999,
+  textTransform: "none",
+  fontWeight: 500,
+  fontFamily: FONT,
+  boxShadow: "none",
+  padding: "6px 20px",
+  "&:hover": { background: "#F7FAFA", boxShadow: "none" },
+  "&:focus-visible": { outline: `2px solid ${C.link}`, outlineOffset: 2 },
+});
+
+const Panel = styled(Card)({
+  background: "#fff",
+  border: `1px solid ${C.border}`,
+  borderRadius: 8,
+  boxShadow: "none",
+  fontFamily: FONT,
+});
+
+const FloatingContactButton = styled(Fab)({
+  position: "fixed",
+  bottom: 24,
+  right: 24,
+  zIndex: 1100,
+  backgroundColor: "#25D366",
+  color: "#fff",
+  "&:hover": { backgroundColor: "#1DA851" },
+});
 
 const DEFAULT_SERVICES = [
-  { id: 1, icon: <Zap size={44} color="#fbbf24" />, title: "Electrician", description: "Fans, wiring, emergency fixes. 30 min response.", color: "#fbbf24", popular: true },
-  { id: 2, icon: <Wrench size={44} color="#f59e0b" />, title: "Appliance Repair", description: "Fridge, Washing Machine, all home appliances.", color: "#f59e0b" },
-  { id: 3, icon: <Bolt size={44} color="#f97316" />, title: "Power Backup", description: "Inverter, Generator support with maintenance.", color: "#f97316" },
-  { id: 4, icon: <Settings size={44} color="#8b5cf6" />, title: "Smart Home", description: "IoT devices, automation, premium setups.", color: "#8b5cf6" },
+  { id: 1, icon: <Zap size={40} color="#B45309" />, title: "Electrician", description: "Fans, wiring, switchboards and emergency fixes.", color: "#FEF3C7", popular: true },
+  { id: 2, icon: <Wrench size={40} color="#0E7490" />, title: "Appliance Repair", description: "Fridge, washing machine and other home appliances.", color: "#CFFAFE" },
+  { id: 3, icon: <Bolt size={40} color="#C2410C" />, title: "Power Backup", description: "Inverter and generator installation and maintenance.", color: "#FFEDD5" },
+  { id: 4, icon: <Settings size={40} color="#6D28D9" />, title: "Smart Home", description: "Smart devices, automation and premium setups.", color: "#EDE9FE" },
 ];
 
 const Footer = lazy(() => import("../components/Footer").catch(() => ({
   default: () => (
-    <Box sx={{ py: 6, textAlign: "center", bgcolor: "#020617", borderTop: "1px solid rgba(255,255,255,0.05)" }}>
-      <Container maxWidth="lg"><Typography sx={{ color: "#64748b", fontSize: 13 }}>© 2026 Quickks. All rights reserved. • {API_ORIGIN}</Typography></Container>
+    <Box sx={{ py: 4, textAlign: "center", bgcolor: C.header }}>
+      <Container maxWidth="lg">
+        <Typography sx={{ color: "#DDD", fontSize: 13, fontFamily: FONT }}>© {new Date().getFullYear()} Quickks. All rights reserved.</Typography>
+      </Container>
     </Box>
-  )
+  ),
 })));
 
-// ---------- MAIN COMPONENT ----------
+function Stars({ value = 4.8, size = 16 }) {
+  const rounded = Math.round(Number(value) || 0);
+  return (
+    <Box component="span" role="img" aria-label={`${value} out of 5 stars`} sx={{ display: "inline-flex", gap: "1px", verticalAlign: "middle" }}>
+      {[1, 2, 3, 4, 5].map((n) => (
+        <Star key={n} size={size} color={C.orange} fill={n <= rounded ? C.orange : "none"} />
+      ))}
+    </Box>
+  );
+}
+
 export default function HomePage() {
   const { isAuthenticated, user } = useAuth();
   const navigate = useNavigate();
   const theme = useTheme();
-  const isMobile = useMediaQuery(theme.breakpoints.down("sm"));
+  const isMobile = useMediaQuery(theme.breakpoints.down("md"));
 
   const mountedRef = useRef(true);
   const servicesRef = useRef(null);
   const featuresRef = useRef(null);
-  const emailInputRef = useRef(null);
-  const abortRef = useRef(null);
 
-  const [location, setLocation] = useState(() => localStorage.getItem('quickks_location') || "");
+  const [location, setLocation] = useState(() => storage.get("local", LOCATION_KEY) || "");
   const [loadingLocation, setLoadingLocation] = useState(false);
   const [showLocationDialog, setShowLocationDialog] = useState(false);
   const [manualLocation, setManualLocation] = useState("");
   const [mobileMenuOpen, setMobileMenuOpen] = useState(false);
   const [snackbar, setSnackbar] = useState({ open: false, message: "", severity: "success" });
-  const [isNavScrolled, setIsNavScrolled] = useState(false);
   const [showExitIntent, setShowExitIntent] = useState(false);
-  const [exitIntentTriggered, setExitIntentTriggered] = useState(false);
+  const [exitEmail, setExitEmail] = useState("");
   const [exitIntentSubmitting, setExitIntentSubmitting] = useState(false);
-  const [liveStats, setLiveStats] = useState({ totalCustomers: 8452, totalProviders: 1532, averageRating: 4.8, satisfactionRate: 99.9 });
+  const [liveStats, setLiveStats] = useState(DEFAULT_STATS);
   const [isLoadingStats, setIsLoadingStats] = useState(true);
   const [services, setServices] = useState(DEFAULT_SERVICES);
   const [isLoadingServices, setIsLoadingServices] = useState(true);
-
-  // ---------- SENIOR: NO AUTO REDIRECT - FIXED v39 ----------
-  // HomePage should NEVER redirect - user must stay on home
+  const [query, setQuery] = useState("");
 
   useEffect(() => {
     mountedRef.current = true;
-    abortRef.current = new AbortController();
-    log('Mounted, API:', API_BASE_URL);
-    return () => {
-      mountedRef.current = false;
-      abortRef.current?.abort();
-    };
+    log("Mounted, API:", API_BASE_URL);
+    return () => { mountedRef.current = false; };
   }, []);
 
   useEffect(() => {
-    const onScroll = () => setIsNavScrolled(window.scrollY > 50);
-    window.addEventListener("scroll", onScroll, { passive: true });
-    return () => window.removeEventListener("scroll", onScroll);
-  }, []);
-
-  // Exit intent - only for guest
-  useEffect(() => {
-    if (isAuthenticated) return;
+    if (isAuthenticated || storage.get("session", EXIT_KEY)) return undefined;
     const onMouseLeave = (e) => {
-      if (e.clientY <= 0 &&!exitIntentTriggered) {
-        setExitIntentTriggered(true);
+      if (e.clientY <= 0) {
+        storage.set("session", EXIT_KEY, "1");
         setShowExitIntent(true);
+        document.removeEventListener("mouseleave", onMouseLeave);
       }
     };
     document.addEventListener("mouseleave", onMouseLeave);
     return () => document.removeEventListener("mouseleave", onMouseLeave);
-  }, [exitIntentTriggered, isAuthenticated]);
-
-  // ---------- v39 FIX: homeService with Abort + Fallback - NO 500 ----------
-  const fetchHomeStats = useCallback(async () => {
-    try {
-      const signal = abortRef.current?.signal;
-      const data = await homeService.getStats(signal);
-      if (!mountedRef.current) return;
-      const safe = data || {};
-      setLiveStats({
-        totalCustomers: safe.totalCustomers || safe.customers || 8452,
-        totalProviders: safe.totalProviders || safe.providers || 1532,
-        averageRating: safe.averageRating || safe.rating || 4.8,
-        satisfactionRate: safe.satisfactionRate || 99.9,
-      });
-    } catch (err) {
-      if (err?.name === 'CanceledError' || err?.code === 'ERR_CANCELED') return;
-      logError('Stats fetch failed, using default', err?.response?.status);
-    } finally {
-      if (mountedRef.current) setIsLoadingStats(false);
-    }
-  }, []);
-
-  const fetchServices = useCallback(async () => {
-    try {
-      const signal = abortRef.current?.signal;
-      const data = await homeService.getPopularServices(signal);
-      if (!mountedRef.current) return;
-      if (Array.isArray(data) && data.length > 0) {
-        // Normalize backend -> frontend format
-        const normalized = data.map((s, idx) => ({
-          id: s.id || idx + 1,
-          icon: DEFAULT_SERVICES[idx % DEFAULT_SERVICES.length]?.icon || <Zap size={44} color={s.color || "#fbbf24"} />,
-          title: s.title || s.name || s.serviceName || "Service",
-          description: s.description || s.desc || "Trusted home service",
-          color: s.color || DEFAULT_SERVICES[idx % DEFAULT_SERVICES.length]?.color || "#fbbf24",
-          popular: s.popular || false,
-        }));
-        setServices(normalized);
-      }
-    } catch (err) {
-      if (err?.name === 'CanceledError') return;
-      logError('Services fetch failed, using default', err?.response?.status);
-    } finally {
-      if (mountedRef.current) setIsLoadingServices(false);
-    }
-  }, []);
+  }, [isAuthenticated]);
 
   useEffect(() => {
+    const controller = new AbortController();
+    const { signal } = controller;
+
+    const fetchHomeStats = async () => {
+      try {
+        const data = (await homeService.getStats(signal)) || {};
+        if (signal.aborted) return;
+        setLiveStats({
+          totalCustomers: data.totalCustomers || data.customers || DEFAULT_STATS.totalCustomers,
+          totalProviders: data.totalProviders || data.providers || DEFAULT_STATS.totalProviders,
+          averageRating: data.averageRating || data.rating || DEFAULT_STATS.averageRating,
+          satisfactionRate: data.satisfactionRate || DEFAULT_STATS.satisfactionRate,
+        });
+      } catch (err) {
+        if (err?.name === "CanceledError" || err?.code === "ERR_CANCELED" || signal.aborted) return;
+        logError("Stats fetch failed, using default", err?.response?.status || err?.message);
+      } finally {
+        if (!signal.aborted) setIsLoadingStats(false);
+      }
+    };
+
+    const fetchServices = async () => {
+      try {
+        const data = await homeService.getPopularServices(signal);
+        if (signal.aborted) return;
+        if (Array.isArray(data) && data.length > 0) {
+          setServices(data.map((s, idx) => {
+            const fallback = DEFAULT_SERVICES[idx % DEFAULT_SERVICES.length];
+            return {
+              id: s.id || idx + 1,
+              icon: fallback.icon,
+              title: s.title || s.name || s.serviceName || "Service",
+              description: s.description || s.desc || "Trusted home service",
+              color: fallback.color,
+              popular: Boolean(s.popular),
+              rating: s.rating || s.averageRating || null,
+              price: s.startingPrice || s.price || null,
+            };
+          }));
+        }
+      } catch (err) {
+        if (err?.name === "CanceledError" || err?.code === "ERR_CANCELED" || signal.aborted) return;
+        logError("Services fetch failed, using default", err?.response?.status || err?.message);
+      } finally {
+        if (!signal.aborted) setIsLoadingServices(false);
+      }
+    };
+
     fetchHomeStats();
     fetchServices();
-    const interval = setInterval(() => mountedRef.current && fetchHomeStats(), 60000);
-    return () => clearInterval(interval);
-  }, [fetchHomeStats, fetchServices]);
 
-  // ---------- Location - v39 with localStorage + debounce ----------
+    const interval = setInterval(() => {
+      if (document.visibilityState === "visible") fetchHomeStats();
+    }, 60000);
+
+    return () => {
+      clearInterval(interval);
+      controller.abort();
+    };
+  }, []);
+
+  const showMessage = useCallback((message, severity = "success") => {
+    setSnackbar({ open: true, message, severity });
+  }, []);
+
+  const saveLocation = useCallback((city) => {
+    setLocation(city);
+    storage.set("local", LOCATION_KEY, city);
+    showMessage(`Location set to ${city}`);
+  }, [showMessage]);
+
   const detectLocation = useCallback(async () => {
-    if (!navigator.geolocation) return;
-    if (localStorage.getItem('quickks_location')) return;
+    if (!navigator.geolocation) {
+      showMessage("Your browser does not support location. Enter your city instead.", "warning");
+      return;
+    }
     setLoadingLocation(true);
     try {
       const pos = await new Promise((resolve, reject) => {
         navigator.geolocation.getCurrentPosition(resolve, reject, { enableHighAccuracy: false, timeout: 8000, maximumAge: 600000 });
       });
       const { latitude, longitude } = pos.coords;
-      // Use backend proxy to avoid CORS - fallback to direct
-      try {
-        const res = await fetch(`https://nominatim.openstreetmap.org/reverse?format=json&lat=${latitude}&lon=${longitude}&zoom=10`, { headers: { 'Accept-Language': 'en' } });
-        const data = await res.json();
-        const city = data?.address?.city || data?.address?.town || data?.address?.county || "Pune";
-        if (mountedRef.current) {
-          setLocation(city);
-          localStorage.setItem('quickks_location', city);
-          setSnackbar({ open: true, message: `📍 ${city}`, severity: "success" });
-        }
-      } catch {
-        if (mountedRef.current) setLocation("Pune");
+      const res = await fetch(`https://nominatim.openstreetmap.org/reverse?format=json&lat=${latitude}&lon=${longitude}&zoom=10`, { headers: { "Accept-Language": "en" } });
+      if (!res.ok) throw new Error("reverse geocode failed");
+      const data = await res.json();
+      const city = data?.address?.city || data?.address?.town || data?.address?.county || data?.address?.state_district;
+      if (!city) throw new Error("no city found");
+      if (mountedRef.current) {
+        saveLocation(city);
+        setShowLocationDialog(false);
       }
-    } catch {
-      logError("Geolocation denied");
+    } catch (err) {
+      logError("Location detection failed", err?.message);
+      if (mountedRef.current) showMessage("Could not detect your location. Enter your city instead.", "warning");
     } finally {
       if (mountedRef.current) setLoadingLocation(false);
     }
-  }, []);
-
-  useEffect(() => { detectLocation(); }, [detectLocation]);
+  }, [saveLocation, showMessage]);
 
   const handleLocationConfirm = useCallback(() => {
     const city = manualLocation.trim();
     if (!city) return;
-    setLocation(city);
-    localStorage.setItem('quickks_location', city);
+    saveLocation(city);
     setShowLocationDialog(false);
-    setSnackbar({ open: true, message: `📍 ${city}`, severity: "success" });
     setManualLocation("");
-  }, [manualLocation]);
+  }, [manualLocation, saveLocation]);
 
-  const scrollToSection = useCallback((ref) => ref?.current?.scrollIntoView({ behavior: "smooth", block: "start" }), []);
+  const scrollToSection = useCallback((ref) => {
+    ref?.current?.scrollIntoView({ behavior: "smooth", block: "start" });
+  }, []);
+
   const handleWhatsApp = useCallback(() => {
-    window.open(`https://wa.me/${CONTACT.WHATSAPP_NUMBER}?text=Hi%20Quickks%2C%20I%20need%20help%20in%20${encodeURIComponent(location || 'Pune')}`, "_blank", "noopener,noreferrer");
+    const text = encodeURIComponent(`Hi Quickks, I need help${location ? ` in ${location}` : ""}`);
+    window.open(`https://wa.me/${CONTACT.WHATSAPP_NUMBER}?text=${text}`, "_blank", "noopener,noreferrer");
   }, [location]);
 
-  const handleNewsletter = useCallback(async (rawEmail) => {
-    const email = (rawEmail || "").trim().toLowerCase();
-    if (!email ||!isValidEmail(email)) {
-      setSnackbar({ open: true, message: "Enter valid email", severity: "error" });
+  const handleNewsletter = useCallback(async () => {
+    const email = exitEmail.trim().toLowerCase();
+    if (!isValidEmail(email)) {
+      showMessage("Enter a valid email address.", "error");
       return;
     }
     setExitIntentSubmitting(true);
     try {
-      await homeService.getStats(); // ping
-      // Use api directly for newsletter
       const { default: api } = await import("../api/api");
-      await api.post('/newsletter/subscribe', { email }).catch(() => {
-        // Fallback - no backend yet
-        return { data: { message: "Subscribed" } };
-      });
-      setSnackbar({ open: true, message: "Subscribed! ₹100 OFF applied 🎉", severity: "success" });
+      await api.post("/newsletter/subscribe", { email });
+      if (!mountedRef.current) return;
+      showMessage("You are subscribed. Your ₹100 offer is on its way to your inbox.");
       setShowExitIntent(false);
-    } catch {
-      setSnackbar({ open: true, message: "Failed, try again", severity: "error" });
+      setExitEmail("");
+    } catch (err) {
+      logError("Newsletter subscribe failed", err?.response?.status || err?.message);
+      if (mountedRef.current) showMessage("We could not subscribe you right now. Please try again.", "error");
     } finally {
-      setExitIntentSubmitting(false);
+      if (mountedRef.current) setExitIntentSubmitting(false);
     }
-  }, []);
+  }, [exitEmail, showMessage]);
 
-  // ---------- Memoized ----------
-  const features = useMemo(() => [
-    { icon: <ShieldCheck size={36} color="#fbbf24" />, title: "Verified Pros", description: "Aadhaar verified, background checked, 4.8★+ rated." },
-    { icon: <Clock size={36} color="#fbbf24" />, title: "30 Min Speed", description: "Book in 30 sec, expert in 30 min." },
-    { icon: <Star size={36} color="#fbbf24" />, title: "Quality Guaranteed", description: "100% satisfaction guarantee." },
-    { icon: <CreditCard size={36} color="#fbbf24" />, title: "Secure & Insured", description: "UPI, Cards, COD. ₹10K protection." },
-  ], []);
+  const handleSearch = useCallback((e) => {
+    e.preventDefault();
+    scrollToSection(servicesRef);
+  }, [scrollToSection]);
 
-  const statsData = useMemo(() => [
-    { value: isLoadingStats? "..." : `${(liveStats.totalCustomers / 1000).toFixed(1)}K+`, label: "Happy Customers" },
-    { value: isLoadingStats? "..." : `${(liveStats.totalProviders / 1000).toFixed(1)}K+`, label: "Verified Pros" },
-    { value: isLoadingStats? "..." : `${liveStats.averageRating}★`, label: "Avg Rating" },
-    { value: isLoadingStats? "..." : `${liveStats.satisfactionRate}%`, label: "Satisfaction" },
-  ], [liveStats, isLoadingStats]);
-
-  const navItems = useMemo(() => [
-    { label: "Services", path: "#services", ref: servicesRef },
-    { label: "Features", path: "#features", ref: featuresRef },
-    { label: "About", path: "/about" },
-    { label: "Contact", path: "/contact" },
-  ], []);
-
-  const getCta = useCallback(() => {
-    if (!isAuthenticated) return { label: "Get Started - It's Free", action: () => navigate("/register"), icon: <ArrowRight size={20} /> };
+  const cta = useMemo(() => {
+    if (!isAuthenticated) return { label: "Get started free", action: () => navigate("/register") };
     const role = user?.role?.toUpperCase();
-    if (role === 'ADMIN' || role === 'SUPER_ADMIN') return { label: "Go to Admin", action: () => navigate("/admin/dashboard"), icon: <ArrowRight size={20} /> };
-    if (role === 'PROVIDER') return { label: "Provider Dashboard", action: () => navigate("/provider/dashboard"), icon: <ArrowRight size={20} /> };
-    return { label: "My Dashboard", action: () => navigate("/customer/dashboard"), icon: <ArrowRight size={20} /> };
+    if (role === "ADMIN" || role === "SUPER_ADMIN") return { label: "Go to admin", action: () => navigate("/admin/dashboard") };
+    if (role === "PROVIDER") return { label: "Provider dashboard", action: () => navigate("/provider/dashboard") };
+    return { label: "My dashboard", action: () => navigate("/customer/dashboard") };
   }, [isAuthenticated, user, navigate]);
 
-  const cta = getCta();
+  const bookAction = useMemo(() => {
+    if (!isAuthenticated) return () => navigate("/register");
+    return cta.action;
+  }, [isAuthenticated, cta, navigate]);
+
+  const features = useMemo(() => [
+    { icon: <ShieldCheck size={32} color={C.green} />, title: "Verified professionals", description: "Aadhaar verified and background checked, with ratings you can read before you book." },
+    { icon: <Clock size={32} color={C.green} />, title: "Fast response", description: "Book in under a minute. A nearby expert aims to reach you within 30 minutes." },
+    { icon: <Star size={32} color={C.green} />, title: "Satisfaction guarantee", description: "If the work is not right, tell us and we will make it right." },
+    { icon: <CreditCard size={32} color={C.green} />, title: "Pay your way", description: "UPI, cards or cash on delivery, with up to ₹10K of job protection." },
+  ], []);
+
+  const steps = useMemo(() => [
+    { title: "Choose a service", description: "Pick what you need fixed or installed and tell us where you are." },
+    { title: "Get matched", description: "We send the closest verified professional who is free right now." },
+    { title: "Job done, then pay", description: "Review the work, pay securely, and rate your experience." },
+  ], []);
+
+  const statsData = useMemo(() => {
+    const placeholder = "–";
+    return [
+      { value: isLoadingStats ? placeholder : `${(liveStats.totalCustomers / 1000).toFixed(1)}K+`, label: "Happy customers" },
+      { value: isLoadingStats ? placeholder : `${(liveStats.totalProviders / 1000).toFixed(1)}K+`, label: "Verified professionals" },
+      { value: isLoadingStats ? placeholder : `${liveStats.averageRating}`, label: "Average rating", stars: true },
+      { value: isLoadingStats ? placeholder : `${liveStats.satisfactionRate}%`, label: "Customer satisfaction" },
+    ];
+  }, [liveStats, isLoadingStats]);
+
+  const navItems = useMemo(() => [
+    { label: "Services", ref: servicesRef },
+    { label: "Why Quickks", ref: featuresRef },
+    { label: "About", to: "/about" },
+    { label: "Contact", to: "/contact" },
+  ], []);
+
+  const visibleServices = useMemo(() => {
+    const q = query.trim().toLowerCase();
+    if (!q) return services;
+    return services.filter((s) => `${s.title} ${s.description}`.toLowerCase().includes(q));
+  }, [services, query]);
+
+  const greetingName = user?.name || user?.firstName || user?.fullName || "there";
+  const closeSnackbar = () => setSnackbar((p) => ({ ...p, open: false }));
+
+  const jsonLd = JSON.stringify({
+    "@context": "https://schema.org",
+    "@type": "HomeAndConstructionBusiness",
+    name: "Quickks",
+    url: "https://www.quickks.in/",
+    telephone: CONTACT.PHONE_TEL,
+    email: CONTACT.EMAIL,
+    areaServed: "Pune",
+  });
+
+  const locationBlock = (
+    <Box
+      component="button"
+      type="button"
+      onClick={() => setShowLocationDialog(true)}
+      aria-label="Change location"
+      sx={{ display: "flex", alignItems: "flex-end", gap: 0.5, color: "#fff", background: "none", border: "1px solid transparent", borderRadius: "2px", p: "6px 8px", cursor: "pointer", fontFamily: FONT, textAlign: "left", "&:hover": { borderColor: "#fff" }, "&:focus-visible": { outline: `2px solid ${C.orange}` } }}
+    >
+      <MapPin size={20} />
+      <Box>
+        <Typography component="span" sx={{ display: "block", fontSize: 12, color: "#CCC", lineHeight: 1.1, fontFamily: FONT }}>Serving</Typography>
+        <Typography component="span" sx={{ display: "block", fontSize: 14, fontWeight: 700, lineHeight: 1.2, fontFamily: FONT }}>
+          {loadingLocation ? "Detecting…" : location || "Set location"}
+        </Typography>
+      </Box>
+    </Box>
+  );
+
+  const searchBar = (
+    <Box component="form" onSubmit={handleSearch} role="search" sx={{ display: "flex", flex: 1, minWidth: 0, borderRadius: "6px", overflow: "hidden", bgcolor: "#fff", "&:focus-within": { boxShadow: `0 0 0 3px ${C.orange}` } }}>
+      <Box
+        component="input"
+        type="search"
+        value={query}
+        onChange={(e) => setQuery(e.target.value)}
+        placeholder="Search services, e.g. fan repair"
+        aria-label="Search services"
+        sx={{ flex: 1, minWidth: 0, border: "none", outline: "none", px: 1.5, py: 1.1, fontSize: 15, fontFamily: FONT, color: C.text }}
+      />
+      <Box component="button" type="submit" aria-label="Search" sx={{ bgcolor: C.orange, border: "none", px: 2, cursor: "pointer", display: "flex", alignItems: "center", color: C.header, "&:hover": { bgcolor: "#FA8900" } }}>
+        <Search size={20} />
+      </Box>
+    </Box>
+  );
 
   return (
     <ErrorBoundary>
       <Helmet>
-        <title>Quickks - Trusted Home Services | 30 Min Speed | 8K+ Happy Customers</title>
-        <meta name="description" content="Electrician, Plumber, AC Repair in 30 min. 8K+ happy customers, 1.5K+ verified pros. Pune's #1 home service." />
+        <title>Quickks – Electrician, Appliance Repair and Home Services in Pune</title>
+        <meta name="description" content="Book verified electricians, appliance repair and home service experts in Pune. Fast response, secure payment and a satisfaction guarantee." />
         <link rel="canonical" href="https://www.quickks.in/" />
+        <meta property="og:title" content="Quickks – Trusted Home Services in Pune" />
+        <meta property="og:description" content="Verified professionals at your door, fast. Book electricians, appliance repair and more." />
+        <meta property="og:url" content="https://www.quickks.in/" />
+        <meta property="og:type" content="website" />
+        <script type="application/ld+json">{jsonLd}</script>
       </Helmet>
-      <Box sx={{ minHeight: "100vh", bgcolor: "#020617", overflowX: "hidden" }}>
-        <FloatingContactButton onClick={handleWhatsApp} aria-label="WhatsApp"><FaWhatsapp size={28} /></FloatingContactButton>
 
-        <AnimatePresence>
-          {showExitIntent &&!isAuthenticated && (
-            <Dialog open={showExitIntent} onClose={() => setShowExitIntent(false)} maxWidth="sm" fullWidth PaperProps={{ sx: { borderRadius: 4, bgcolor: "#0f172a", border: "1px solid rgba(251,191,36,0.2)" } }}>
-              <DialogTitle sx={{ color: "white", fontWeight: 800 }}>Wait! Get ₹100 OFF ⚡</DialogTitle>
-              <DialogContent><TextField fullWidth placeholder="your@email.com" type="email" inputRef={emailInputRef} autoFocus sx={{ mt: 1, input: { color: "white" } }} /></DialogContent>
-              <DialogActions sx={{ p: 2 }}><Button onClick={() => setShowExitIntent(false)} sx={{ color: "#94a3b8" }}>No thanks</Button><Button variant="contained" onClick={() => handleNewsletter(emailInputRef.current?.value)} disabled={exitIntentSubmitting} sx={{ bgcolor: "#fbbf24", color: "#020617", fontWeight: 800 }}>{exitIntentSubmitting? <CircularProgress size={20} /> : "Claim ₹100 OFF"}</Button></DialogActions>
-            </Dialog>
-          )}
-        </AnimatePresence>
+      <Box sx={{ minHeight: "100vh", bgcolor: C.bg, fontFamily: FONT, color: C.text, overflowX: "hidden" }}>
+        <FloatingContactButton onClick={handleWhatsApp} aria-label="Chat on WhatsApp"><FaWhatsapp size={28} /></FloatingContactButton>
 
-        <GlassNav component={motion.div} initial={{ y: -100 }} animate={{ y: 0 }} transition={{ duration: 0.6 }} sx={{...(isNavScrolled && { bgcolor: "rgba(2,6,23,0.95)", boxShadow: "0 10px 40px rgba(0,0,0,0.5)" }) }}>
-          <Container maxWidth="xl">
-            <Box sx={{ display: "flex", justifyContent: "space-between", alignItems: "center" }}>
-              <Box sx={{ display: "flex", alignItems: "center", gap: 1.5, cursor: "pointer" }} onClick={() => navigate("/")}><LogoImg src={QuickksLogo} alt="Quickks Logo" /><Typography variant="h5" sx={{ fontWeight: 900, color: "white", letterSpacing: "-1px", "& span": { color: "#fbbf24" } }}>Quickks<span>.</span></Typography></Box>
-              {!isMobile && (
-                <Box sx={{ display: "flex", alignItems: "center", gap: 3 }}>
-                  {navItems.map((item) => (
-                    <Typography key={item.label} component={item.path.startsWith("#")? "button" : Link} {...(!item.path.startsWith("#") && { to: item.path })} onClick={() => { if (item.ref) scrollToSection(item.ref); }} sx={{ color: "#94a3b8", textDecoration: "none", fontWeight: 600, fontSize: "0.9rem", background: "none", border: "none", cursor: "pointer", fontFamily: "inherit", "&:hover": { color: "white" } }}>{item.label}</Typography>
-                  ))}
-                  {isAuthenticated? (
-                    <Button variant="contained" onClick={cta.action} sx={{ bgcolor: "#fbbf24", color: "#020617", borderRadius: 3, fontWeight: 800, textTransform: "none" }}>{cta.label}</Button>
-                  ) : (
-                    <>
-                      <Button variant="outlined" onClick={() => navigate("/login")} startIcon={<LogIn size={18} />} sx={{ color: "white", borderColor: "rgba(255,255,255,0.15)", borderRadius: 3, textTransform: "none" }}>Login</Button>
-                      <Button variant="contained" onClick={() => navigate("/register")} startIcon={<UserPlus size={18} />} sx={{ bgcolor: "#fff", color: "#020617", borderRadius: 3, fontWeight: 800, textTransform: "none" }}>Get Started</Button>
-                    </>
-                  )}
+        <Box component="header" sx={{ position: "sticky", top: 0, zIndex: 1000 }}>
+          <Box sx={{ bgcolor: C.header, py: 1 }}>
+            <Container maxWidth="xl">
+              <Box sx={{ display: "flex", alignItems: "center", gap: { xs: 1, md: 2 }, flexWrap: { xs: "wrap", md: "nowrap" } }}>
+                <Box component="button" type="button" onClick={() => navigate("/")} aria-label="Quickks home" sx={{ display: "flex", alignItems: "center", gap: 1, background: "none", border: "1px solid transparent", borderRadius: "2px", p: "4px 8px", cursor: "pointer", "&:hover": { borderColor: "#fff" }, "&:focus-visible": { outline: `2px solid ${C.orange}` } }}>
+                  <Box component="img" src={QuickksLogo} alt="" sx={{ width: 36, height: 36, objectFit: "contain", bgcolor: "#fff", borderRadius: "8px", p: "4px" }} />
+                  <Typography sx={{ fontWeight: 800, color: "#fff", fontSize: 22, letterSpacing: "-0.5px", fontFamily: FONT }}>Quickks<Box component="span" sx={{ color: C.orange }}>.</Box></Typography>
                 </Box>
-              )}
-              {isMobile && <IconButton onClick={() => setMobileMenuOpen(true)} sx={{ color: "white", bgcolor: "rgba(255,255,255,0.06)" }}><Menu size={22} /></IconButton>}
-            </Box>
-          </Container>
-        </GlassNav>
 
-        <Drawer anchor="right" open={mobileMenuOpen} onClose={() => setMobileMenuOpen(false)} PaperProps={{ sx: { width: 320, bgcolor: "#020617", color: "white", p: 3 } }}>
-          <Box sx={{ display: "flex", justifyContent: "space-between", mb: 4 }}><Typography variant="h6" fontWeight={800}>Quickks</Typography><IconButton onClick={() => setMobileMenuOpen(false)} sx={{ color: "white" }}><X size={20} /></IconButton></Box>
-          <Divider sx={{ borderColor: "rgba(255,255,255,0.06)", mb: 3 }} />
-          <List>{navItems.map((item) => <ListItem key={item.label} component={item.path.startsWith("#")? "button" : Link} {...(!item.path.startsWith("#") && { to: item.path })} onClick={() => { setMobileMenuOpen(false); if (item.ref) scrollToSection(item.ref); }}><ListItemText primary={item.label} /></ListItem>)}</List>
-          <Box sx={{ mt: 3 }}>{isAuthenticated? <Button fullWidth variant="contained" onClick={() => { setMobileMenuOpen(false); cta.action(); }} sx={{ bgcolor: "#fbbf24", color: "#020617", fontWeight: 800 }}>{cta.label}</Button> : <Button fullWidth variant="contained" onClick={() => { setMobileMenuOpen(false); navigate("/register"); }} sx={{ bgcolor: "#fff", color: "#020617", fontWeight: 800 }}>Get Started</Button>}</Box>
+                {!isMobile && locationBlock}
+                {!isMobile && searchBar}
+
+                {!isMobile && (
+                  <Box sx={{ display: "flex", alignItems: "center", gap: 1.5, ml: "auto" }}>
+                    {isAuthenticated ? (
+                      <>
+                        <Typography sx={{ color: "#fff", fontSize: 14, fontFamily: FONT }}>Hello, {greetingName}</Typography>
+                        <PrimaryButton onClick={cta.action}>{cta.label}</PrimaryButton>
+                      </>
+                    ) : (
+                      <>
+                        <NavButton type="button" onClick={() => navigate("/login")}>Sign in</NavButton>
+                        <PrimaryButton onClick={() => navigate("/register")}>Get started</PrimaryButton>
+                      </>
+                    )}
+                  </Box>
+                )}
+
+                {isMobile && (
+                  <IconButton onClick={() => setMobileMenuOpen(true)} aria-label="Open menu" sx={{ color: "#fff", ml: "auto" }}><Menu size={24} /></IconButton>
+                )}
+
+                {isMobile && <Box sx={{ width: "100%", display: "flex", flexDirection: "column", gap: 1 }}>{searchBar}{locationBlock}</Box>}
+              </Box>
+            </Container>
+          </Box>
+
+          {!isMobile && (
+            <Box sx={{ bgcolor: C.sub }}>
+              <Container maxWidth="xl">
+                <Box sx={{ display: "flex", alignItems: "center", gap: 0.5, py: 0.5 }}>
+                  {navItems.map((item) => (
+                    item.to
+                      ? <NavRouterLink key={item.label} to={item.to}>{item.label}</NavRouterLink>
+                      : <NavButton key={item.label} type="button" onClick={() => scrollToSection(item.ref)}>{item.label}</NavButton>
+                  ))}
+                  <Box sx={{ ml: "auto" }}>
+                    <NavRouterLink as="a" href={`tel:${CONTACT.PHONE_TEL}`} aria-label={`Call ${CONTACT.PHONE_DISPLAY}`}>
+                      <Box component="span" sx={{ display: "inline-flex", alignItems: "center", gap: 0.75 }}><Phone size={14} />{CONTACT.PHONE_DISPLAY}</Box>
+                    </NavRouterLink>
+                  </Box>
+                </Box>
+              </Container>
+            </Box>
+          )}
+        </Box>
+
+        <Drawer anchor="right" open={mobileMenuOpen} onClose={() => setMobileMenuOpen(false)} PaperProps={{ sx: { width: 300, bgcolor: "#fff", color: C.text } }}>
+          <Box sx={{ bgcolor: C.sub, color: "#fff", p: 2, display: "flex", justifyContent: "space-between", alignItems: "center" }}>
+            <Typography sx={{ fontWeight: 700, fontFamily: FONT }}>{isAuthenticated ? `Hello, ${greetingName}` : "Welcome to Quickks"}</Typography>
+            <IconButton onClick={() => setMobileMenuOpen(false)} aria-label="Close menu" sx={{ color: "#fff" }}><X size={20} /></IconButton>
+          </Box>
+          <List>
+            {navItems.map((item) => (
+              <ListItemButton
+                key={item.label}
+                {...(item.to ? { component: Link, to: item.to } : {})}
+                onClick={() => { setMobileMenuOpen(false); if (item.ref) scrollToSection(item.ref); }}
+              >
+                <ListItemText primary={item.label} />
+              </ListItemButton>
+            ))}
+            <ListItemButton component="a" href={`tel:${CONTACT.PHONE_TEL}`}><ListItemText primary={`Call ${CONTACT.PHONE_DISPLAY}`} /></ListItemButton>
+          </List>
+          <Divider />
+          <Stack spacing={1.5} sx={{ p: 2 }}>
+            {isAuthenticated ? (
+              <PrimaryButton fullWidth onClick={() => { setMobileMenuOpen(false); cta.action(); }}>{cta.label}</PrimaryButton>
+            ) : (
+              <>
+                <PrimaryButton fullWidth onClick={() => { setMobileMenuOpen(false); navigate("/register"); }}>Get started</PrimaryButton>
+                <SecondaryButton fullWidth onClick={() => { setMobileMenuOpen(false); navigate("/login"); }}>Sign in</SecondaryButton>
+              </>
+            )}
+          </Stack>
         </Drawer>
 
-        <HeroSection>
-          <Container maxWidth="lg" sx={{ position: "relative", zIndex: 1, pt: { xs: 12, md: 10 } }}>
-            <Box component={motion.div} initial={{ opacity: 0, y: 40 }} animate={{ opacity: 1, y: 0 }} transition={{ duration: 1 }} sx={{ textAlign: "center" }}>
-              <Box sx={{ display: "inline-flex", alignItems: "center", gap: 1.5, px: 2.5, py: 1, borderRadius: 999, bgcolor: "rgba(251,191,36,0.1)", border: "1px solid rgba(251,191,36,0.2)", mb: 4 }}>
-                <Box sx={{ width: 8, height: 8, bgcolor: "#22c55e", borderRadius: "50%" }} /><Typography variant="caption" sx={{ color: "#fbbf24", fontWeight: 700, letterSpacing: 1 }}>TRUSTED BY 8,452+ • 4.9★ RATED • API: {API_ORIGIN}</Typography>
-              </Box>
-              <Box sx={{ display: "flex", justifyContent: "center", mb: 4 }}><HeroLogo src={QuickksLogo} alt="Quickks - Home Services" /></Box>
-              <Typography variant="h1" sx={{ fontSize: { xs: "2.8rem", sm: "4rem", md: "5.5rem" }, fontWeight: 900, color: "white", lineHeight: 0.9, letterSpacing: "-3px", mb: 3 }}>Powering Homes <br />With <GradientText component="span">Trust</GradientText></Typography>
-              <Typography variant="h6" sx={{ color: "#94a3b8", maxWidth: 720, mx: "auto", mb: 5, fontSize: { xs: "1rem", md: "1.25rem" }, lineHeight: 1.6 }}>Highest-rated experts. <Box component="span" sx={{ color: "white", fontWeight: 600 }}>30 min response</Box> • 4.9★ • 100% verified • {API_BASE_URL.includes('/quickks')? '⚠️ OLD API' : '✅ LIVE API'}</Typography>
-              <Stack direction={{ xs: "column", sm: "row" }} spacing={2} justifyContent="center" alignItems="center" sx={{ mb: 6 }}>
-                <Button variant="contained" size="large" onClick={cta.action} endIcon={cta.icon} sx={{ bgcolor: "#fff", color: "#020617", px: 6, py: 2, borderRadius: 999, fontWeight: 900, fontSize: "1.1rem", textTransform: "none", "&:hover": { bgcolor: "#fbbf24" } }}>{cta.label}</Button>
-                <Box onClick={() => setShowLocationDialog(true)} sx={{ display: "flex", alignItems: "center", gap: 2, px: 3.5, py: 2, borderRadius: 999, bgcolor: "rgba(255,255,255,0.06)", border: "1px solid rgba(255,255,255,0.1)", cursor: "pointer" }}>
-                  <Box sx={{ width: 40, height: 40, borderRadius: "50%", bgcolor: "rgba(251,191,36,0.15)", display: "flex", alignItems: "center", justifyContent: "center" }}><MapPin size={20} color="#fbbf24" /></Box>
-                  <Box sx={{ textAlign: "left" }}><Typography variant="caption" sx={{ color: "#64748b", display: "block", fontSize: "0.7rem" }}>YOUR LOCATION</Typography><Typography variant="body2" sx={{ color: "white", fontWeight: 700 }}>{loadingLocation? <CircularProgress size={16} sx={{ color: "#fbbf24" }} /> : location || "Detect Location"}</Typography></Box>
+        <Box component="main">
+          <Box sx={{ background: `linear-gradient(180deg, ${C.sub} 0%, ${C.slate} 55%, ${C.bg} 100%)`, pt: { xs: 5, md: 8 }, pb: { xs: 14, md: 18 } }}>
+            <Container maxWidth="lg">
+              <Box sx={{ display: "grid", gridTemplateColumns: { xs: "1fr", md: "1.6fr 1fr" }, gap: 3, alignItems: "center" }}>
+                <Box>
+                  <Typography component="h1" sx={{ color: "#fff", fontWeight: 700, fontFamily: FONT, fontSize: { xs: "2rem", md: "3rem" }, lineHeight: 1.15, mb: 2 }}>
+                    Trusted home services, at your door in 30 minutes
+                  </Typography>
+                  <Typography sx={{ color: "#E3E6E6", fontSize: { xs: 16, md: 18 }, maxWidth: 560, mb: 3, lineHeight: 1.55, fontFamily: FONT }}>
+                    Book verified electricians, appliance repair and more. See ratings, pay securely and get a satisfaction guarantee on every job.
+                  </Typography>
+                  <Stack direction={{ xs: "column", sm: "row" }} spacing={1.5}>
+                    <PrimaryButton size="large" onClick={cta.action} endIcon={<ArrowRight size={18} />} sx={{ px: 4, py: 1.1, fontSize: 16 }}>{cta.label}</PrimaryButton>
+                    <SecondaryButton size="large" onClick={() => scrollToSection(servicesRef)} sx={{ px: 4, py: 1.1, fontSize: 16 }}>Browse services</SecondaryButton>
+                  </Stack>
                 </Box>
-              </Stack>
-              <Box sx={{ display: "grid", gridTemplateColumns: { xs: "repeat(2, 1fr)", md: "repeat(4, 1fr)" }, gap: 2, maxWidth: 800, mx: "auto", mt: 6 }}>
-                {statsData.map((stat, i) => (<StatsCard key={i}><Typography variant="h4" sx={{ color: "white", fontWeight: 900 }}>{stat.value}</Typography><Typography variant="caption" sx={{ color: "#94a3b8" }}>{stat.label}</Typography></StatsCard>))}
+
+                <Panel sx={{ p: 3 }}>
+                  {isAuthenticated ? (
+                    <>
+                      <Typography component="h2" sx={{ fontSize: 21, fontWeight: 700, mb: 1, fontFamily: FONT }}>Welcome back, {greetingName}</Typography>
+                      <Typography sx={{ color: C.muted, fontSize: 14, mb: 2, fontFamily: FONT }}>Pick up where you left off or book something new.</Typography>
+                      <PrimaryButton fullWidth onClick={cta.action}>{cta.label}</PrimaryButton>
+                    </>
+                  ) : (
+                    <>
+                      <Typography component="h2" sx={{ fontSize: 21, fontWeight: 700, mb: 1, fontFamily: FONT }}>Sign in for faster booking</Typography>
+                      <Typography sx={{ color: C.muted, fontSize: 14, mb: 2, fontFamily: FONT }}>Track your professional, save addresses and rebook in one tap.</Typography>
+                      <Stack spacing={1.25}>
+                        <PrimaryButton fullWidth onClick={() => navigate("/login")}>Sign in securely</PrimaryButton>
+                        <SecondaryButton fullWidth onClick={() => navigate("/register")}>Create your account</SecondaryButton>
+                      </Stack>
+                    </>
+                  )}
+                </Panel>
               </Box>
+            </Container>
+          </Box>
+
+          <Container maxWidth="lg" sx={{ mt: { xs: -10, md: -12 }, position: "relative", zIndex: 1 }}>
+            <Box sx={{ display: "grid", gridTemplateColumns: { xs: "repeat(2, 1fr)", md: "repeat(4, 1fr)" }, gap: 2 }}>
+              {statsData.map((stat) => (
+                <Panel key={stat.label} sx={{ p: 2.5, textAlign: "center" }}>
+                  <Typography sx={{ fontSize: { xs: 26, md: 32 }, fontWeight: 700, lineHeight: 1.1, fontFamily: FONT }}>{stat.value}</Typography>
+                  {stat.stars && !isLoadingStats && <Box sx={{ mt: 0.5 }}><Stars value={liveStats.averageRating} size={15} /></Box>}
+                  <Typography sx={{ color: C.muted, fontSize: 14, mt: 0.5, fontFamily: FONT }}>{stat.label}</Typography>
+                </Panel>
+              ))}
             </Box>
           </Container>
-        </HeroSection>
 
-        <Box ref={featuresRef} sx={{ py: { xs: 8, md: 14 }, bgcolor: "#f8fafc" }}>
-          <Container maxWidth="lg">
-            <Box sx={{ textAlign: "center", mb: 8 }}><Chip label="WHY CHOOSE US" sx={{ bgcolor: "#020617", color: "#fbbf24", fontWeight: 800, mb: 2 }} /><Typography variant="h2" sx={{ fontWeight: 900, color: "#020617", mb: 2, fontSize: { xs: "2rem", md: "3rem" } }}>Built for Trust & Speed</Typography></Box>
-            <Grid container spacing={4}>{features.map((f, i) => (<Grid item xs={12} sm={6} md={3} key={i}><FeatureCard><Box sx={{ width: 80, height: 80, borderRadius: 4, bgcolor: "rgba(251,191,36,0.12)", display: "flex", alignItems: "center", justifyContent: "center", mb: 2.5 }}>{f.icon}</Box><Typography variant="h6" sx={{ fontWeight: 800, color: "#020617", mb: 1 }}>{f.title}</Typography><Typography variant="body2" sx={{ color: "#64748b" }}>{f.description}</Typography></FeatureCard></Grid>))}</Grid>
-          </Container>
+          <Box ref={servicesRef} id="services" sx={{ pt: { xs: 6, md: 8 }, scrollMarginTop: 130 }}>
+            <Container maxWidth="lg">
+              <Panel sx={{ p: { xs: 2, md: 3 } }}>
+                <Box sx={{ display: "flex", alignItems: "baseline", justifyContent: "space-between", flexWrap: "wrap", gap: 1, mb: 2.5 }}>
+                  <Typography component="h2" sx={{ fontSize: { xs: 22, md: 28 }, fontWeight: 700, fontFamily: FONT }}>
+                    Popular services{location ? ` in ${location}` : ""}
+                  </Typography>
+                  {query && (
+                    <Box component="button" type="button" onClick={() => setQuery("")} sx={{ background: "none", border: "none", color: C.link, cursor: "pointer", fontSize: 14, fontFamily: FONT, "&:hover": { textDecoration: "underline", color: "#C7511F" } }}>
+                      Clear search
+                    </Box>
+                  )}
+                </Box>
+
+                {isLoadingServices ? (
+                  <Box sx={{ display: "grid", gridTemplateColumns: { xs: "1fr", sm: "repeat(2, 1fr)", md: "repeat(4, 1fr)" }, gap: 2 }}>
+                    {[1, 2, 3, 4].map((i) => <Skeleton key={i} variant="rectangular" height={280} sx={{ borderRadius: 2 }} />)}
+                  </Box>
+                ) : visibleServices.length === 0 ? (
+                  <Box sx={{ py: 6, textAlign: "center" }}>
+                    <Typography sx={{ fontSize: 18, fontWeight: 700, mb: 0.5, fontFamily: FONT }}>No services match “{query}”</Typography>
+                    <Typography sx={{ color: C.muted, mb: 2, fontFamily: FONT }}>Check the spelling or search for a broader term like “electrician”.</Typography>
+                    <SecondaryButton onClick={() => setQuery("")}>Show all services</SecondaryButton>
+                  </Box>
+                ) : (
+                  <Box sx={{ display: "grid", gridTemplateColumns: { xs: "1fr", sm: "repeat(2, 1fr)", md: "repeat(4, 1fr)" }, gap: 2 }}>
+                    {visibleServices.map((s, idx) => (
+                      <Panel key={s.id || idx} sx={{ p: 2, display: "flex", flexDirection: "column", height: "100%", "&:hover": { boxShadow: "0 2px 8px rgba(15,17,17,0.15)" } }}>
+                        <Box sx={{ position: "relative", height: 120, borderRadius: 1.5, bgcolor: s.color, display: "flex", alignItems: "center", justifyContent: "center", mb: 2 }}>
+                          {s.icon}
+                          {s.popular && (
+                            <Box sx={{ position: "absolute", top: 8, left: 8, bgcolor: "#CC0C39", color: "#fff", fontSize: 12, fontWeight: 700, px: 1, py: 0.25, borderRadius: "2px", fontFamily: FONT }}>Most booked</Box>
+                          )}
+                        </Box>
+                        <Typography component="h3" sx={{ fontSize: 18, fontWeight: 700, mb: 0.5, fontFamily: FONT }}>{s.title}</Typography>
+                        <Box sx={{ display: "flex", alignItems: "center", gap: 0.75, mb: 1 }}>
+                          <Stars value={s.rating || liveStats.averageRating} size={14} />
+                          <Typography sx={{ color: C.link, fontSize: 13, fontFamily: FONT }}>{s.rating || liveStats.averageRating}</Typography>
+                        </Box>
+                        <Typography sx={{ color: C.muted, fontSize: 14, lineHeight: 1.5, mb: 1.5, flex: 1, fontFamily: FONT }}>{s.description}</Typography>
+                        {s.price && <Typography sx={{ color: C.price, fontSize: 16, fontWeight: 700, mb: 0.5, fontFamily: FONT }}>From ₹{s.price}</Typography>}
+                        <Typography sx={{ color: C.green, fontSize: 13, fontWeight: 600, mb: 1.5, fontFamily: FONT }}>Typical response: 30 minutes</Typography>
+                        <PrimaryButton fullWidth onClick={bookAction}>Book now</PrimaryButton>
+                      </Panel>
+                    ))}
+                  </Box>
+                )}
+              </Panel>
+            </Container>
+          </Box>
+
+          <Box ref={featuresRef} id="features" sx={{ pt: 3, scrollMarginTop: 130 }}>
+            <Container maxWidth="lg">
+              <Panel sx={{ p: { xs: 2, md: 3 } }}>
+                <Typography component="h2" sx={{ fontSize: { xs: 22, md: 28 }, fontWeight: 700, mb: 2.5, fontFamily: FONT }}>Why customers book with Quickks</Typography>
+                <Box sx={{ display: "grid", gridTemplateColumns: { xs: "1fr", sm: "repeat(2, 1fr)", md: "repeat(4, 1fr)" }, gap: 2 }}>
+                  {features.map((f) => (
+                    <Box key={f.title} sx={{ p: 2, border: `1px solid ${C.border}`, borderRadius: 2 }}>
+                      <Box sx={{ mb: 1.5 }}>{f.icon}</Box>
+                      <Typography component="h3" sx={{ fontSize: 17, fontWeight: 700, mb: 0.5, fontFamily: FONT }}>{f.title}</Typography>
+                      <Typography sx={{ color: C.muted, fontSize: 14, lineHeight: 1.55, fontFamily: FONT }}>{f.description}</Typography>
+                    </Box>
+                  ))}
+                </Box>
+              </Panel>
+            </Container>
+          </Box>
+
+          <Box sx={{ pt: 3 }}>
+            <Container maxWidth="lg">
+              <Panel sx={{ p: { xs: 2, md: 3 } }}>
+                <Typography component="h2" sx={{ fontSize: { xs: 22, md: 28 }, fontWeight: 700, mb: 2.5, fontFamily: FONT }}>How it works</Typography>
+                <Box component="ol" sx={{ listStyle: "none", m: 0, p: 0, display: "grid", gridTemplateColumns: { xs: "1fr", md: "repeat(3, 1fr)" }, gap: 2 }}>
+                  {steps.map((s, i) => (
+                    <Box component="li" key={s.title} sx={{ display: "flex", gap: 1.5, alignItems: "flex-start" }}>
+                      <Box sx={{ flexShrink: 0, width: 32, height: 32, borderRadius: "50%", bgcolor: C.sub, color: "#fff", display: "flex", alignItems: "center", justifyContent: "center", fontWeight: 700, fontFamily: FONT }}>{i + 1}</Box>
+                      <Box>
+                        <Typography component="h3" sx={{ fontSize: 17, fontWeight: 700, mb: 0.25, fontFamily: FONT }}>{s.title}</Typography>
+                        <Typography sx={{ color: C.muted, fontSize: 14, lineHeight: 1.55, fontFamily: FONT }}>{s.description}</Typography>
+                      </Box>
+                    </Box>
+                  ))}
+                </Box>
+              </Panel>
+            </Container>
+          </Box>
+
+          <Box sx={{ py: 4 }}>
+            <Container maxWidth="lg">
+              <Panel sx={{ p: { xs: 2.5, md: 4 }, textAlign: "center" }}>
+                <Typography component="h2" sx={{ fontSize: { xs: 22, md: 28 }, fontWeight: 700, mb: 1, fontFamily: FONT }}>Ready to get it fixed?</Typography>
+                <Typography sx={{ color: C.muted, mb: 2.5, fontFamily: FONT }}>
+                  Questions before you book? Call <Box component="a" href={`tel:${CONTACT.PHONE_TEL}`} sx={{ color: C.link }}>{CONTACT.PHONE_DISPLAY}</Box> or write to <Box component="a" href={`mailto:${CONTACT.EMAIL}`} sx={{ color: C.link }}>{CONTACT.EMAIL}</Box>.
+                </Typography>
+                <Stack direction={{ xs: "column", sm: "row" }} spacing={1.5} justifyContent="center">
+                  <PrimaryButton size="large" onClick={cta.action} sx={{ px: 5 }}>{cta.label}</PrimaryButton>
+                  {!isAuthenticated && <SecondaryButton size="large" onClick={() => navigate("/login")} sx={{ px: 5 }}>Sign in</SecondaryButton>}
+                </Stack>
+              </Panel>
+            </Container>
+          </Box>
         </Box>
 
-        <Box ref={servicesRef} sx={{ bgcolor: "white", py: { xs: 8, md: 14 } }}>
-          <Container maxWidth="lg">
-            <Box sx={{ textAlign: "center", mb: 8 }}><Typography variant="h2" sx={{ fontWeight: 900, color: "#020617", mb: 2, fontSize: { xs: "2rem", md: "3rem" } }}>Services at Your Doorstep</Typography></Box>
-            {isLoadingServices? <Grid container spacing={4}>{[F1, 2, 3, 4].map((i) => <Grid item xs={12} sm={6} md={3} key={i}><Skeleton variant="rectangular" height={250} sx={{ borderRadius: 4 }} /></Grid>)}</Grid> : (
-              <Grid container spacing={4}>{services.map((s, idx) => (<Grid item xs={12} sm={6} md={3} key={s.id || idx}><ServiceCard color={s.color}><CardContent sx={{ p: 0, flex: 1, display: "flex", flexDirection: "column" }}><Box sx={{ width: 80, height: 80, borderRadius: 4, bgcolor: `${s.color}14`, display: "flex", alignItems: "center", justifyContent: "center", mb: 2.5 }}>{s.icon}</Box><Typography variant="h6" sx={{ fontWeight: 800, color: "#020617", mb: 1 }}>{s.title}</Typography><Typography variant="body2" sx={{ color: "#64748b", mb: 3, flex: 1 }}>{s.description}</Typography><Button variant="contained" onClick={() => navigate("/register")} endIcon={<ArrowRight size={16} />} sx={{ bgcolor: "#020617", color: "white", borderRadius: 3, textTransform: "none" }}>Book Now</Button></CardContent></ServiceCard></Grid>))}</Grid>
-            )}
-          </Container>
+        <Box component="button" type="button" onClick={() => window.scrollTo({ top: 0, behavior: "smooth" })} sx={{ display: "block", width: "100%", bgcolor: C.slate, color: "#fff", border: "none", py: 1.75, cursor: "pointer", fontSize: 13, fontFamily: FONT, "&:hover": { bgcolor: "#485769" }, "&:focus-visible": { outline: `2px solid ${C.orange}`, outlineOffset: -2 } }}>
+          Back to top
         </Box>
 
-        <CTASection><Container maxWidth="md" sx={{ textAlign: "center" }}><Typography variant="h2" sx={{ color: "white", fontWeight: 900, mb: 2, fontSize: { xs: "2.2rem", md: "3.5rem" } }}>Ready for <Box component="span" sx={{ color: "#fbbf24" }}>Lightning Speed?</Box></Typography><Stack direction={{ xs: "column", sm: "row" }} spacing={2} justifyContent="center" sx={{ mt: 4 }}><Button variant="contained" size="large" onClick={cta.action} sx={{ bgcolor: "#fff", color: "#020617", px: 6, py: 2, borderRadius: 999, fontWeight: 900 }}>{cta.label}</Button><Button variant="outlined" size="large" onClick={() => navigate("/login")} sx={{ borderColor: "rgba(255,255,255,0.15)", color: "white", px: 6, py: 2, borderRadius: 999 }}>Login</Button></Stack></Container></CTASection>
+        <Suspense fallback={<Box sx={{ py: 4, textAlign: "center", bgcolor: C.header }}><CircularProgress size={24} sx={{ color: C.orange }} /></Box>}>
+          <Footer />
+        </Suspense>
 
-        <Suspense fallback={<Box sx={{ py: 4, textAlign: "center" }}><CircularProgress size={24} sx={{ color: "#fbbf24" }} /></Box>}><Footer /></Suspense>
-
-        <Dialog open={showLocationDialog} onClose={() => setShowLocationDialog(false)} maxWidth="sm" fullWidth PaperProps={{ sx: { borderRadius: 4, bgcolor: "#0f172a" } }}>
-          <DialogTitle sx={{ color: "white", fontWeight: 800 }}>Set Your Location</DialogTitle>
-          <DialogContent><TextField fullWidth label="City or Area" placeholder="e.g., Dharampeth, Pune" value={manualLocation} onChange={(e) => setManualLocation(e.target.value)} autoFocus onKeyDown={(e) => e.key === 'Enter' && handleLocationConfirm()} sx={{ mt: 1, input: { color: "white" } }} /></DialogContent>
-          <DialogActions sx={{ p: 2.5 }}><Button onClick={() => setShowLocationDialog(false)} sx={{ color: "#94a3b8" }}>Cancel</Button><Button variant="contained" onClick={handleLocationConfirm} disabled={!manualLocation.trim()} sx={{ bgcolor: "#fbbf24", color: "#020617", fontWeight: 800 }}>Confirm</Button></DialogActions>
+        <Dialog open={showExitIntent && !isAuthenticated} onClose={() => setShowExitIntent(false)} maxWidth="xs" fullWidth PaperProps={{ sx: { borderRadius: 2 } }}>
+          <DialogTitle sx={{ fontWeight: 700, fontFamily: FONT }}>Get ₹100 off your first booking</DialogTitle>
+          <DialogContent>
+            <Typography sx={{ color: C.muted, fontSize: 14, mb: 1.5, fontFamily: FONT }}>Enter your email and we will send the offer.</Typography>
+            <TextField
+              fullWidth
+              autoFocus
+              type="email"
+              label="Email address"
+              value={exitEmail}
+              onChange={(e) => setExitEmail(e.target.value)}
+              onKeyDown={(e) => { if (e.key === "Enter") handleNewsletter(); }}
+            />
+          </DialogContent>
+          <DialogActions sx={{ p: 2 }}>
+            <SecondaryButton onClick={() => setShowExitIntent(false)}>No thanks</SecondaryButton>
+            <PrimaryButton onClick={handleNewsletter} disabled={exitIntentSubmitting}>
+              {exitIntentSubmitting ? <CircularProgress size={20} /> : "Send my offer"}
+            </PrimaryButton>
+          </DialogActions>
         </Dialog>
 
-        <Snackbar open={snackbar.open} autoHideDuration={4000} onClose={() => setSnackbar((p) => ({...p, open: false }))} anchorOrigin={{ vertical: "bottom", horizontal: "right" }}><Alert severity={snackbar.severity} sx={{ borderRadius: 3 }} onClose={() => setSnackbar((p) => ({...p, open: false }))}>{snackbar.message}</Alert></Snackbar>
+        <Dialog open={showLocationDialog} onClose={() => setShowLocationDialog(false)} maxWidth="xs" fullWidth PaperProps={{ sx: { borderRadius: 2 } }}>
+          <DialogTitle sx={{ fontWeight: 700, fontFamily: FONT }}>Choose your location</DialogTitle>
+          <DialogContent>
+            <Typography sx={{ color: C.muted, fontSize: 14, mb: 2, fontFamily: FONT }}>We show professionals and response times for your area.</Typography>
+            <SecondaryButton fullWidth onClick={detectLocation} disabled={loadingLocation} startIcon={loadingLocation ? <CircularProgress size={16} /> : <LocateFixed size={18} />} sx={{ mb: 2 }}>
+              {loadingLocation ? "Detecting…" : "Use my current location"}
+            </SecondaryButton>
+            <TextField
+              fullWidth
+              label="City or area"
+              placeholder="For example, Kothrud, Pune"
+              value={manualLocation}
+              onChange={(e) => setManualLocation(e.target.value)}
+              onKeyDown={(e) => { if (e.key === "Enter") handleLocationConfirm(); }}
+            />
+          </DialogContent>
+          <DialogActions sx={{ p: 2 }}>
+            <SecondaryButton onClick={() => setShowLocationDialog(false)}>Cancel</SecondaryButton>
+            <PrimaryButton onClick={handleLocationConfirm} disabled={!manualLocation.trim()}>Apply</PrimaryButton>
+          </DialogActions>
+        </Dialog>
+
+        <Snackbar open={snackbar.open} autoHideDuration={4000} onClose={closeSnackbar} anchorOrigin={{ vertical: "bottom", horizontal: "left" }}>
+          <Alert severity={snackbar.severity} onClose={closeSnackbar} sx={{ borderRadius: 2 }}>{snackbar.message}</Alert>
+        </Snackbar>
       </Box>
     </ErrorBoundary>
   );

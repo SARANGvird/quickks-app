@@ -1,10 +1,8 @@
 import React, { useEffect, useRef, useState, useCallback, useMemo } from "react";
 import PropTypes from "prop-types";
-import { MapContainer, TileLayer, Marker, Popup, useMap } from "react-leaflet";
+import { MapContainer, TileLayer, Marker, Popup, Polyline, useMap } from "react-leaflet";
 import L from "leaflet";
 import "leaflet/dist/leaflet.css";
-import "leaflet-routing-machine";
-import "leaflet-routing-machine/dist/leaflet-routing-machine.css";
 import {
   Box,
   Paper,
@@ -30,6 +28,7 @@ import {
   DirectionsWalk,
   DirectionsBike,
   SatelliteAlt,
+  Terrain,
   Map as MapIcon,
   Close,
   Person,
@@ -40,162 +39,296 @@ import { motion, AnimatePresence } from "framer-motion";
 
 const DEFAULT_ZOOM = 14;
 const DEFAULT_CENTER = { lat: 18.5204, lng: 73.8567 };
+const DETOUR_FACTOR = 1.3;
+const ROUTE_DEBOUNCE_MS = 400;
 
 const TILE_LAYERS = {
   street: {
-    url: "https://{s}.tile.openstreetmap.org/{z}/{x}/{y}.png",
-    attribution: '&copy; OpenStreetMap',
+    label: "Street",
+    icon: MapIcon,
+    url: "https://tile.openstreetmap.org/{z}/{x}/{y}.png",
+    attribution: '&copy; <a href="https://www.openstreetmap.org/copyright">OpenStreetMap</a> contributors',
+    maxZoom: 19,
   },
   satellite: {
-    url: "https://{s}.google.com/vt/lyrs=s&x={x}&y={y}&z={z}",
-    attribution: '&copy; Google',
-    subdomains: ["mt0", "mt1", "mt2", "mt3"],
+    label: "Satellite",
+    icon: SatelliteAlt,
+    url: "https://server.arcgisonline.com/ArcGIS/rest/services/World_Imagery/MapServer/tile/{z}/{y}/{x}",
+    attribution: "Tiles &copy; Esri &mdash; Source: Esri, Maxar, Earthstar Geographics, and the GIS User Community",
+    maxZoom: 19,
   },
   terrain: {
+    label: "Terrain",
+    icon: Terrain,
     url: "https://{s}.tile.opentopomap.org/{z}/{x}/{y}.png",
-    attribution: '&copy; OpenTopoMap',
+    attribution: '&copy; <a href="https://www.openstreetmap.org/copyright">OpenStreetMap</a> contributors, <a href="https://opentopomap.org">OpenTopoMap</a>',
+    subdomains: "abc",
+    maxZoom: 17,
   },
 };
 
 const TRAVEL_MODES = {
-  driving: { label: "Driving", icon: DirectionsCar, color: "#3b82f6", profile: "driving" },
-  walking: { label: "Walking", icon: DirectionsWalk, color: "#10b981", profile: "foot" },
-  cycling: { label: "Cycling", icon: DirectionsBike, color: "#f59e0b", profile: "bike" },
+  driving: {
+    label: "Driving",
+    icon: DirectionsCar,
+    color: "#3b82f6",
+    router: "https://routing.openstreetmap.de/routed-car/route/v1/driving",
+    speedKmh: 30,
+  },
+  walking: {
+    label: "Walking",
+    icon: DirectionsWalk,
+    color: "#10b981",
+    router: "https://routing.openstreetmap.de/routed-foot/route/v1/driving",
+    speedKmh: 5,
+  },
+  cycling: {
+    label: "Cycling",
+    icon: DirectionsBike,
+    color: "#f59e0b",
+    router: "https://routing.openstreetmap.de/routed-bike/route/v1/driving",
+    speedKmh: 15,
+  },
 };
 
-delete L.Icon.Default.prototype._getIconUrl;
-L.Icon.Default.mergeOptions({
-  iconRetinaUrl: "https://unpkg.com/leaflet@1.9.4/dist/images/marker-icon-2x.png",
-  iconUrl: "https://unpkg.com/leaflet@1.9.4/dist/images/marker-icon.png",
-  shadowUrl: "https://unpkg.com/leaflet@1.9.4/dist/images/marker-shadow.png",
-});
+const pinSvg = (fill) =>
+  `<svg xmlns="http://www.w3.org/2000/svg" width="30" height="42" viewBox="0 0 30 42"><path d="M15 1C7.3 1 1 7.3 1 15c0 10.5 14 26 14 26s14-15.5 14-26C29 7.3 22.7 1 15 1z" fill="${fill}" stroke="#ffffff" stroke-width="2"/><circle cx="15" cy="15" r="5.5" fill="#ffffff"/></svg>`;
+
+const createPin = (fill) =>
+  L.divIcon({
+    html: pinSvg(fill),
+    className: "",
+    iconSize: [30, 42],
+    iconAnchor: [15, 42],
+    popupAnchor: [0, -38],
+  });
+
+const PROVIDER_ICON = createPin("#16a34a");
+const CUSTOMER_ICON = createPin("#dc2626");
+const USER_ICON = createPin("#2563eb");
+
+const toCoord = (p) => {
+  if (!p || p.lat === null || p.lng === null || p.lat === "" || p.lng === "") return null;
+  const lat = Number(p.lat);
+  const lng = Number(p.lng);
+  if (!Number.isFinite(lat) || !Number.isFinite(lng)) return null;
+  if (Math.abs(lat) > 90 || Math.abs(lng) > 180) return null;
+  if (lat === 0 && lng === 0) return null;
+  return { ...p, lat, lng };
+};
+
+const round4 = (n) => Math.round(n * 10000) / 10000;
 
 const calculateDistance = (lat1, lng1, lat2, lng2) => {
   const R = 6371;
-  const dLat = (lat2 - lat1) * Math.PI / 180;
-  const dLng = (lng2 - lng1) * Math.PI / 180;
+  const dLat = ((lat2 - lat1) * Math.PI) / 180;
+  const dLng = ((lng2 - lng1) * Math.PI) / 180;
   const a =
     Math.sin(dLat / 2) * Math.sin(dLat / 2) +
-    Math.cos(lat1 * Math.PI / 180) *
-      Math.cos(lat2 * Math.PI / 180) *
+    Math.cos((lat1 * Math.PI) / 180) *
+      Math.cos((lat2 * Math.PI) / 180) *
       Math.sin(dLng / 2) *
       Math.sin(dLng / 2);
   const c = 2 * Math.atan2(Math.sqrt(a), Math.sqrt(1 - a));
   return R * c;
 };
 
-const formatDistance = (d) => (d < 1 ? `${Math.round(d * 1000)} m` : `${d.toFixed(1)} km`);
-const formatDuration = (m) => {
-  if (m < 60) return `${Math.round(m)} min`;
-  const h = Math.floor(m / 60);
-  const mm = Math.round(m % 60);
-  return `${h}h${mm > 0 ? ` ${mm}m` : ""}`;
+const formatDistance = (d) => {
+  const meters = Math.round(d * 1000);
+  return meters < 1000 ? `${meters} m` : `${d.toFixed(1)} km`;
+};
+
+const formatDuration = (minutes) => {
+  const total = Math.max(1, Math.round(minutes));
+  if (total < 60) return `${total} min`;
+  const h = Math.floor(total / 60);
+  const m = total % 60;
+  return m > 0 ? `${h}h ${m}m` : `${h}h`;
+};
+
+const GEO_ERRORS = {
+  1: "Location permission was denied. Allow location access in your browser settings.",
+  2: "Your location is currently unavailable.",
+  3: "Finding your location took too long. Try again.",
 };
 
 const useGeolocation = () => {
   const [location, setLocation] = useState(null);
   const [error, setError] = useState(null);
   const [loading, setLoading] = useState(false);
+  const mountedRef = useRef(true);
+
+  useEffect(() => {
+    mountedRef.current = true;
+    return () => {
+      mountedRef.current = false;
+    };
+  }, []);
+
   const getCurrentLocation = useCallback(() => {
     if (!navigator.geolocation) {
-      setError("Geolocation not supported");
+      setError("Your browser does not support location services.");
       return;
     }
     setLoading(true);
+    setError(null);
     navigator.geolocation.getCurrentPosition(
       (p) => {
+        if (!mountedRef.current) return;
         setLocation({ lat: p.coords.latitude, lng: p.coords.longitude });
-        setError(null);
         setLoading(false);
       },
       (e) => {
-        setError(e.message);
+        if (!mountedRef.current) return;
+        setError(GEO_ERRORS[e.code] || "Could not get your location.");
         setLoading(false);
       },
-      { enableHighAccuracy: true, timeout: 10000 }
+      { enableHighAccuracy: true, timeout: 10000, maximumAge: 30000 }
     );
   }, []);
-  return { location, error, loading, getCurrentLocation };
+
+  const clearError = useCallback(() => setError(null), []);
+
+  return { location, error, loading, getCurrentLocation, clearError };
 };
 
-const MapControlsInternal = () => {
+const MapBridge = ({ mapRef, boundsPoints, autoFit }) => {
   const map = useMap();
-  const [isFullscreen, setIsFullscreen] = useState(false);
+
   useEffect(() => {
-    const h = () => setIsFullscreen(!!document.fullscreenElement);
-    document.addEventListener("fullscreenchange", h);
-    return () => document.removeEventListener("fullscreenchange", h);
-  }, []);
-  if (!map) return null;
+    mapRef.current = map;
+    return () => {
+      if (mapRef.current === map) mapRef.current = null;
+    };
+  }, [map, mapRef]);
+
+  useEffect(() => {
+    if (typeof ResizeObserver === "undefined") return undefined;
+    const observer = new ResizeObserver(() => map.invalidateSize());
+    observer.observe(map.getContainer());
+    return () => observer.disconnect();
+  }, [map]);
+
+  const boundsKey = boundsPoints.map((p) => `${p[0]},${p[1]}`).join("|");
+
+  useEffect(() => {
+    if (!autoFit || boundsPoints.length === 0) return;
+    try {
+      map.invalidateSize();
+      map.fitBounds(L.latLngBounds(boundsPoints), { padding: [50, 50], maxZoom: 16 });
+    } catch {
+      return;
+    }
+  }, [map, boundsKey, autoFit]);
+
+  return null;
+};
+
+const RoutePath = ({ start, end, mode, onRoute }) => {
+  const [path, setPath] = useState(null);
+  const [isDirect, setIsDirect] = useState(false);
+  const callbackRef = useRef(onRoute);
+
+  useEffect(() => {
+    callbackRef.current = onRoute;
+  }, [onRoute]);
+
+  const sLat = round4(start.lat);
+  const sLng = round4(start.lng);
+  const eLat = round4(end.lat);
+  const eLng = round4(end.lng);
+
+  useEffect(() => {
+    const controller = new AbortController();
+    const config = TRAVEL_MODES[mode] || TRAVEL_MODES.driving;
+    let active = true;
+
+    setPath(null);
+    setIsDirect(false);
+    callbackRef.current?.(null);
+
+    const timer = setTimeout(async () => {
+      try {
+        const url = `${config.router}/${sLng},${sLat};${eLng},${eLat}?overview=full&geometries=geojson&alternatives=false&steps=false`;
+        const res = await fetch(url, { signal: controller.signal });
+        if (!res.ok) throw new Error(`routing failed: ${res.status}`);
+        const data = await res.json();
+        const route = data?.routes?.[0];
+        if (data?.code !== "Ok" || !route?.geometry?.coordinates?.length) throw new Error("no route");
+        if (!active) return;
+        setPath(route.geometry.coordinates.map(([lng, lat]) => [lat, lng]));
+        setIsDirect(false);
+        callbackRef.current?.({
+          distance: route.distance / 1000,
+          duration: route.duration / 60,
+          isDirect: false,
+          isEstimate: false,
+          travelMode: mode,
+        });
+      } catch (err) {
+        if (!active || err?.name === "AbortError") return;
+        const straight = calculateDistance(sLat, sLng, eLat, eLng);
+        const estimated = straight * DETOUR_FACTOR;
+        setPath(null);
+        setIsDirect(true);
+        callbackRef.current?.({
+          distance: estimated,
+          duration: (estimated / config.speedKmh) * 60,
+          isDirect: true,
+          isEstimate: true,
+          travelMode: mode,
+        });
+      }
+    }, ROUTE_DEBOUNCE_MS);
+
+    return () => {
+      active = false;
+      clearTimeout(timer);
+      controller.abort();
+    };
+  }, [sLat, sLng, eLat, eLng, mode]);
+
+  const color = (TRAVEL_MODES[mode] || TRAVEL_MODES.driving).color;
+
   return (
-    <Box sx={{ position: "absolute", bottom: 20, right: 20, zIndex: 1000, display: "flex", flexDirection: "column", gap: 1 }}>
-      <Tooltip title="Zoom In"><IconButton size="small" onClick={() => map.zoomIn()} sx={{ bgcolor: "white", boxShadow: 2 }}><ZoomIn fontSize="small" /></IconButton></Tooltip>
-      <Tooltip title="Zoom Out"><IconButton size="small" onClick={() => map.zoomOut()} sx={{ bgcolor: "white", boxShadow: 2 }}><ZoomOut fontSize="small" /></IconButton></Tooltip>
-      <Tooltip title="Fullscreen">
-        <IconButton size="small" onClick={() => {
-          const c = map.getContainer();
-          if (!isFullscreen) c?.requestFullscreen();
-          else document.exitFullscreen();
-        }} sx={{ bgcolor: "white", boxShadow: 2 }}>
-          {isFullscreen ? <FullscreenExit fontSize="small" /> : <Fullscreen fontSize="small" />}
-        </IconButton>
-      </Tooltip>
-    </Box>
+    <>
+      {path && <Polyline positions={path} pathOptions={{ color, weight: 5, opacity: 0.85 }} />}
+      {isDirect && (
+        <Polyline
+          positions={[
+            [sLat, sLng],
+            [eLat, eLng],
+          ]}
+          pathOptions={{ color, weight: 4, opacity: 0.7, dashArray: "8 10" }}
+        />
+      )}
+    </>
   );
 };
 
-const RoutingMachine = ({ start, end, travelMode = "driving", onRouteFound }) => {
-  const map = useMap();
-  const routingRef = useRef(null);
-  useEffect(() => {
-    if (!map || !start || !end) return;
-    if (!L.Routing || !L.Routing.control) return;
-    const sLat = Number(start.lat);
-    const sLng = Number(start.lng);
-    const eLat = Number(end.lat);
-    const eLng = Number(end.lng);
-    if (Number.isNaN(sLat) || Number.isNaN(sLng) || Number.isNaN(eLat) || Number.isNaN(eLng)) return;
+const MapButton = ({ title, onClick, active = false, activeColor = "primary.main", disabled = false, flat = false, children }) => (
+  <Tooltip title={title}>
+    <span>
+      <IconButton
+        size="small"
+        onClick={onClick}
+        disabled={disabled}
+        aria-label={title}
+        aria-pressed={active || undefined}
+        sx={{
+          bgcolor: active ? activeColor : flat ? "transparent" : "white",
+          color: active ? "white" : "text.primary",
+          boxShadow: flat ? 0 : 2,
+          "&:hover": { bgcolor: active ? activeColor : "grey.100" },
+        }}
+      >
+        {children}
+      </IconButton>
+    </span>
+  </Tooltip>
+);
 
-    try {
-      if (routingRef.current) {
-        try { map.removeControl(routingRef.current); } catch {}
-        routingRef.current = null;
-      }
-      const profile = TRAVEL_MODES[travelMode]?.profile || "driving";
-      const control = L.Routing.control({
-        waypoints: [L.latLng(sLat, sLng), L.latLng(eLat, eLng)],
-        routeWhileDragging: false,
-        showAlternatives: false,
-        fitSelectedRoutes: true,
-        addWaypoints: false,
-        draggableWaypoints: false,
-        createMarker: () => null,
-        lineOptions: { styles: [{ color: "#6366f1", weight: 5, opacity: 0.85 }], extendToWaypoints: true, missingRouteTolerance: 0 },
-        router: L.Routing.osrmv1({ serviceUrl: "https://router.project-osrm.org/route/v1", profile }),
-        show: false,
-      }).addTo(map);
-
-      control.on("routesfound", (e) => {
-        const r = e.routes?.[0];
-        if (!r) return;
-        onRouteFound?.({ distance: r.summary.totalDistance / 1000, duration: r.summary.totalTime / 60 });
-      });
-      control.on("routingerror", () => {
-        onRouteFound?.({ distance: calculateDistance(sLat, sLng, eLat, eLng), duration: 0, isDirect: true });
-      });
-      routingRef.current = control;
-    } catch {
-      onRouteFound?.({ distance: calculateDistance(sLat, sLng, eLat, eLng), duration: 0, isDirect: true });
-    }
-    return () => {
-      if (routingRef.current) {
-        try { map.removeControl(routingRef.current); } catch {}
-        routingRef.current = null;
-      }
-    };
-  }, [map, start, end, travelMode, onRouteFound]);
-  return null;
-};
+const getFullscreenElement = () => document.fullscreenElement || document.webkitFullscreenElement || null;
 
 const BookingMap = ({
   provider,
@@ -209,153 +342,307 @@ const BookingMap = ({
   onRouteInfo,
   zoom = DEFAULT_ZOOM,
   center,
+  autoFit = true,
+  scrollWheelZoom = true,
   className = "",
 }) => {
+  const safeMode = TRAVEL_MODES[travelMode] ? travelMode : "driving";
   const [routeInfo, setRouteInfo] = useState(null);
-  const [currentTravelMode, setCurrentTravelMode] = useState(travelMode);
+  const [currentTravelMode, setCurrentTravelMode] = useState(safeMode);
   const [showInfoDrawer, setShowInfoDrawer] = useState(false);
   const [tileLayer, setTileLayer] = useState("street");
-  const { location: userLocation, getCurrentLocation } = useGeolocation();
-  const mapInstanceRef = useRef(null);
+  const [isFullscreen, setIsFullscreen] = useState(false);
+  const { location: userLocation, error: geoError, loading: geoLoading, getCurrentLocation, clearError } = useGeolocation();
+  const mapRef = useRef(null);
+  const outerRef = useRef(null);
+  const onRouteInfoRef = useRef(onRouteInfo);
 
-  useEffect(() => { setCurrentTravelMode(travelMode); }, [travelMode]);
+  useEffect(() => {
+    onRouteInfoRef.current = onRouteInfo;
+  }, [onRouteInfo]);
 
-  const isValidCoord = (p) => p && typeof p.lat === "number" && typeof p.lng === "number" && !Number.isNaN(p.lat) && !Number.isNaN(p.lng);
+  useEffect(() => {
+    setCurrentTravelMode(safeMode);
+  }, [safeMode]);
+
+  const safeProvider = useMemo(() => toCoord(provider), [provider?.lat, provider?.lng, provider?.name, provider?.address]);
+  const safeCustomer = useMemo(() => toCoord(customer), [customer?.lat, customer?.lng, customer?.address]);
+  const safeCenter = useMemo(() => toCoord(center), [center?.lat, center?.lng]);
 
   const directDistance = useMemo(() => {
-    if (!isValidCoord(provider) || !isValidCoord(customer)) return null;
-    return calculateDistance(provider.lat, provider.lng, customer.lat, customer.lng);
-  }, [provider, customer]);
+    if (!safeProvider || !safeCustomer) return null;
+    return calculateDistance(safeProvider.lat, safeProvider.lng, safeCustomer.lat, safeCustomer.lng);
+  }, [safeProvider, safeCustomer]);
 
-  const mapCenter = useMemo(() => {
-    if (center && isValidCoord(center)) return center;
-    if (isValidCoord(provider)) return provider;
-    if (isValidCoord(customer)) return customer;
-    return DEFAULT_CENTER;
-  }, [center, provider, customer]);
+  const mapCenter = useMemo(() => safeCenter || safeProvider || safeCustomer || DEFAULT_CENTER, [safeCenter, safeProvider, safeCustomer]);
+
+  const boundsPoints = useMemo(() => {
+    if (!safeProvider || !safeCustomer) return [];
+    return [
+      [round4(safeProvider.lat), round4(safeProvider.lng)],
+      [round4(safeCustomer.lat), round4(safeCustomer.lng)],
+    ];
+  }, [safeProvider, safeCustomer]);
 
   const handleRouteFound = useCallback((route) => {
     setRouteInfo(route);
-    onRouteInfo?.(route);
-  }, [onRouteInfo]);
+    if (route) onRouteInfoRef.current?.(route);
+  }, []);
 
-  const fitBounds = useCallback(() => {
-    if (mapInstanceRef.current && isValidCoord(provider) && isValidCoord(customer)) {
-      try {
-        const bounds = L.latLngBounds([provider.lat, provider.lng], [customer.lat, customer.lng]);
-        mapInstanceRef.current.fitBounds(bounds, { padding: [50, 50] });
-      } catch {}
+  useEffect(() => {
+    if (userLocation && mapRef.current) {
+      mapRef.current.flyTo([userLocation.lat, userLocation.lng], 15);
     }
-  }, [provider, customer]);
+  }, [userLocation]);
 
-  useEffect(() => { const t = setTimeout(() => fitBounds(), 300); return () => clearTimeout(t); }, [fitBounds]);
+  useEffect(() => {
+    const onChange = () => setIsFullscreen(getFullscreenElement() === outerRef.current);
+    document.addEventListener("fullscreenchange", onChange);
+    document.addEventListener("webkitfullscreenchange", onChange);
+    return () => {
+      document.removeEventListener("fullscreenchange", onChange);
+      document.removeEventListener("webkitfullscreenchange", onChange);
+    };
+  }, []);
 
-  const providerIcon = useMemo(() => new L.Icon({
-    iconUrl: "https://raw.githubusercontent.com/pointhi/leaflet-color-markers/master/img/marker-icon-green.png",
-    shadowUrl: "https://unpkg.com/leaflet@1.9.4/dist/images/marker-shadow.png",
-    iconSize: [25, 41], iconAnchor: [12, 41], popupAnchor: [1, -34], shadowSize: [41, 41],
-  }), []);
+  const fullscreenSupported = typeof document !== "undefined" && Boolean(document.fullscreenEnabled || document.webkitFullscreenEnabled);
 
-  const customerIcon = useMemo(() => new L.Icon({
-    iconUrl: "https://raw.githubusercontent.com/pointhi/leaflet-color-markers/master/img/marker-icon-red.png",
-    shadowUrl: "https://unpkg.com/leaflet@1.9.4/dist/images/marker-shadow.png",
-    iconSize: [25, 41], iconAnchor: [12, 41], popupAnchor: [1, -34], shadowSize: [41, 41],
-  }), []);
+  const toggleFullscreen = useCallback(async () => {
+    const el = outerRef.current;
+    if (!el) return;
+    try {
+      if (getFullscreenElement()) {
+        await (document.exitFullscreen ? document.exitFullscreen() : document.webkitExitFullscreen?.());
+      } else {
+        await (el.requestFullscreen ? el.requestFullscreen() : el.webkitRequestFullscreen?.());
+      }
+    } catch {
+      return;
+    }
+  }, []);
 
-  const userIcon = useMemo(() => new L.Icon({
-    iconUrl: "https://raw.githubusercontent.com/pointhi/leaflet-color-markers/master/img/marker-icon-blue.png",
-    shadowUrl: "https://unpkg.com/leaflet@1.9.4/dist/images/marker-shadow.png",
-    iconSize: [25, 41], iconAnchor: [12, 41], popupAnchor: [1, -34], shadowSize: [41, 41],
-  }), []);
+  const focusOn = useCallback((point) => {
+    if (point && mapRef.current) mapRef.current.setView([point.lat, point.lng], 16);
+  }, []);
 
-  if (!isValidCoord(provider) || !isValidCoord(customer)) {
-    return <Paper sx={{ p: 3, textAlign: "center", height, width, display: "flex", alignItems: "center", justifyContent: "center" }}><Typography color="text.secondary">Location information not available</Typography></Paper>;
+  if (!safeProvider || !safeCustomer) {
+    return (
+      <Paper className={className} sx={{ p: 3, textAlign: "center", height, width, display: "flex", alignItems: "center", justifyContent: "center" }}>
+        <Typography color="text.secondary">Location information not available</Typography>
+      </Paper>
+    );
   }
 
-  const TravelIcon = TRAVEL_MODES[currentTravelMode]?.icon || DirectionsCar;
+  const modeConfig = TRAVEL_MODES[currentTravelMode] || TRAVEL_MODES.driving;
+  const TravelIcon = modeConfig.icon;
   const tileConfig = TILE_LAYERS[tileLayer] || TILE_LAYERS.street;
+  const etaVisible = showEta && showRouting;
+  const approx = routeInfo?.isEstimate ? "~" : "";
 
   return (
-    <Box className={className} sx={{ position: "relative", height, width, borderRadius: 3, overflow: "hidden", border: "1px solid #e5e7eb" }}>
-      <MapContainer
-        center={mapCenter}
-        zoom={zoom}
-        style={{ height: "100%", width: "100%" }}
-        ref={mapInstanceRef}
-        whenReady={() => { try { setTimeout(() => fitBounds(), 200); } catch {} }}
-      >
-        <TileLayer url={tileConfig.url} attribution={tileConfig.attribution} subdomains={tileConfig.subdomains} />
-        <Marker position={provider} icon={providerIcon}><Popup><Box sx={{ p: 1 }}><Typography variant="subtitle2" fontWeight={700}>Provider</Typography><Typography variant="caption">{provider.lat.toFixed(5)}, {provider.lng.toFixed(5)}</Typography></Box></Popup></Marker>
-        <Marker position={customer} icon={customerIcon}><Popup><Box sx={{ p: 1 }}><Typography variant="subtitle2" fontWeight={700}>Customer</Typography><Typography variant="caption">{customer.address || `${customer.lat.toFixed(5)}, ${customer.lng.toFixed(5)}`}</Typography></Box></Popup></Marker>
-        {isValidCoord(userLocation) && <Marker position={userLocation} icon={userIcon}><Popup>Your Location</Popup></Marker>}
-        {showRouting && isValidCoord(provider) && isValidCoord(customer) && <RoutingMachine start={provider} end={customer} travelMode={currentTravelMode} onRouteFound={handleRouteFound} />}
-        {showControls && <MapControlsInternal />}
-      </MapContainer>
+    <Box
+      ref={outerRef}
+      className={className}
+      sx={{
+        position: "relative",
+        display: "flex",
+        flexDirection: "column",
+        height,
+        width,
+        borderRadius: 3,
+        overflow: "hidden",
+        border: "1px solid #e5e7eb",
+        bgcolor: "#fff",
+        isolation: "isolate",
+        "&:fullscreen": { height: "100vh", width: "100vw", borderRadius: 0, border: "none" },
+        "&:-webkit-full-screen": { height: "100vh", width: "100vw", borderRadius: 0, border: "none" },
+      }}
+    >
+      <Box sx={{ position: "relative", flex: 1, minHeight: 0 }}>
+        <MapContainer
+          center={mapCenter}
+          zoom={zoom}
+          zoomControl={false}
+          scrollWheelZoom={scrollWheelZoom}
+          style={{ height: "100%", width: "100%" }}
+        >
+          <MapBridge mapRef={mapRef} boundsPoints={boundsPoints} autoFit={autoFit} />
+          <TileLayer
+            key={tileLayer}
+            url={tileConfig.url}
+            attribution={tileConfig.attribution}
+            subdomains={tileConfig.subdomains || "abc"}
+            maxZoom={tileConfig.maxZoom}
+          />
+          <Marker position={[safeProvider.lat, safeProvider.lng]} icon={PROVIDER_ICON}>
+            <Popup>
+              <Box sx={{ p: 1 }}>
+                <Typography variant="subtitle2" fontWeight={700}>{safeProvider.name || "Provider"}</Typography>
+                <Typography variant="caption">{safeProvider.address || `${safeProvider.lat.toFixed(5)}, ${safeProvider.lng.toFixed(5)}`}</Typography>
+              </Box>
+            </Popup>
+          </Marker>
+          <Marker position={[safeCustomer.lat, safeCustomer.lng]} icon={CUSTOMER_ICON}>
+            <Popup>
+              <Box sx={{ p: 1 }}>
+                <Typography variant="subtitle2" fontWeight={700}>Customer</Typography>
+                <Typography variant="caption">{safeCustomer.address || `${safeCustomer.lat.toFixed(5)}, ${safeCustomer.lng.toFixed(5)}`}</Typography>
+              </Box>
+            </Popup>
+          </Marker>
+          {userLocation && (
+            <Marker position={[userLocation.lat, userLocation.lng]} icon={USER_ICON}>
+              <Popup>Your location</Popup>
+            </Marker>
+          )}
+          {showRouting && <RoutePath start={safeProvider} end={safeCustomer} mode={currentTravelMode} onRoute={handleRouteFound} />}
+        </MapContainer>
 
-      <AnimatePresence>
-        {showEta && routeInfo && (
-          <motion.div initial={{ opacity: 0, y: 20 }} animate={{ opacity: 1, y: 0 }} exit={{ opacity: 0, y: 20 }} style={{ position: "absolute", bottom: 16, left: 16, right: 16, zIndex: 1000 }}>
-            <Paper sx={{ p: 1.5, borderRadius: 2, boxShadow: 3 }}>
-              <Stack direction="row" justifyContent="space-between" alignItems="center" flexWrap="wrap" gap={1}>
-                <Stack direction="row" spacing={1.5} alignItems="center">
-                  <Chip icon={<TravelIcon />} label={TRAVEL_MODES[currentTravelMode]?.label} size="small" color="primary" variant="outlined" />
-                  <Box><Typography variant="caption" color="text.secondary">Distance</Typography><Typography variant="body2" fontWeight={700}>{formatDistance(routeInfo.distance)}</Typography></Box>
-                  <Box><Typography variant="caption" color="text.secondary">ETA</Typography><Typography variant="body2" fontWeight={700}>{formatDuration(routeInfo.duration)}</Typography></Box>
-                </Stack>
-                <Stack direction="row" spacing={1} alignItems="center">
-                  {directDistance && <Chip label={`Direct: ${formatDistance(directDistance)}`} size="small" variant="outlined" />}
-                  <IconButton size="small" onClick={() => setShowInfoDrawer(true)}><InfoOutlined fontSize="small" /></IconButton>
-                </Stack>
-              </Stack>
+        <Box sx={{ position: "absolute", top: 12, left: 12, zIndex: 1000, display: "flex", flexDirection: "column", gap: 1 }}>
+          {showRouting && (
+            <Paper sx={{ p: 0.5, display: "flex", gap: 0.5, boxShadow: 2 }}>
+              {Object.entries(TRAVEL_MODES).map(([mode, cfg]) => {
+                const Icon = cfg.icon;
+                return (
+                  <MapButton key={mode} title={cfg.label} flat active={currentTravelMode === mode} activeColor={cfg.color} onClick={() => setCurrentTravelMode(mode)}>
+                    <Icon fontSize="small" />
+                  </MapButton>
+                );
+              })}
             </Paper>
+          )}
+          <Paper sx={{ p: 0.5, display: "flex", gap: 0.5, boxShadow: 2 }}>
+            {Object.entries(TILE_LAYERS).map(([key, cfg]) => {
+              const Icon = cfg.icon;
+              return (
+                <MapButton key={key} title={cfg.label} flat active={tileLayer === key} onClick={() => setTileLayer(key)}>
+                  <Icon fontSize="small" />
+                </MapButton>
+              );
+            })}
+          </Paper>
+        </Box>
+
+        <Box sx={{ position: "absolute", top: 12, right: 12, zIndex: 1000, display: "flex", flexDirection: "column", gap: 1 }}>
+          <MapButton title="My location" onClick={getCurrentLocation} disabled={geoLoading}>
+            {geoLoading ? <CircularProgress size={20} /> : <MyLocation fontSize="small" />}
+          </MapButton>
+          <MapButton title="Go to provider" onClick={() => focusOn(safeProvider)}>
+            <Storefront fontSize="small" />
+          </MapButton>
+          <MapButton title="Go to customer" onClick={() => focusOn(safeCustomer)}>
+            <Person fontSize="small" />
+          </MapButton>
+          {showControls && (
+            <>
+              <MapButton title="Zoom in" onClick={() => mapRef.current?.zoomIn()}>
+                <ZoomIn fontSize="small" />
+              </MapButton>
+              <MapButton title="Zoom out" onClick={() => mapRef.current?.zoomOut()}>
+                <ZoomOut fontSize="small" />
+              </MapButton>
+              {fullscreenSupported && (
+                <MapButton title={isFullscreen ? "Exit fullscreen" : "Fullscreen"} onClick={toggleFullscreen}>
+                  {isFullscreen ? <FullscreenExit fontSize="small" /> : <Fullscreen fontSize="small" />}
+                </MapButton>
+              )}
+            </>
+          )}
+        </Box>
+
+        {geoError && (
+          <Box sx={{ position: "absolute", top: 12, left: "50%", transform: "translateX(-50%)", zIndex: 1000, maxWidth: "70%" }}>
+            <Chip color="warning" label={geoError} onDelete={clearError} sx={{ height: "auto", "& .MuiChip-label": { whiteSpace: "normal", py: 0.5 } }} />
+          </Box>
+        )}
+      </Box>
+
+      <AnimatePresence initial={false}>
+        {etaVisible && (
+          <motion.div
+            key="eta"
+            initial={{ height: 0, opacity: 0 }}
+            animate={{ height: "auto", opacity: 1 }}
+            exit={{ height: 0, opacity: 0 }}
+            transition={{ duration: 0.2 }}
+            style={{ overflow: "hidden", flexShrink: 0 }}
+          >
+            <Box sx={{ p: 1.5, borderTop: "1px solid #e5e7eb", bgcolor: "#fff" }}>
+              {routeInfo ? (
+                <Stack direction="row" justifyContent="space-between" alignItems="center" flexWrap="wrap" gap={1}>
+                  <Stack direction="row" spacing={1.5} alignItems="center" flexWrap="wrap" useFlexGap>
+                    <Chip icon={<TravelIcon />} label={modeConfig.label} size="small" color="primary" variant="outlined" />
+                    <Box>
+                      <Typography variant="caption" color="text.secondary">Distance</Typography>
+                      <Typography variant="body2" fontWeight={700}>{approx}{formatDistance(routeInfo.distance)}</Typography>
+                    </Box>
+                    <Box>
+                      <Typography variant="caption" color="text.secondary">ETA</Typography>
+                      <Typography variant="body2" fontWeight={700}>{approx}{formatDuration(routeInfo.duration)}</Typography>
+                    </Box>
+                  </Stack>
+                  <Stack direction="row" spacing={1} alignItems="center">
+                    {routeInfo.isDirect && <Chip label="Route unavailable, estimate shown" size="small" color="warning" variant="outlined" />}
+                    {directDistance !== null && <Chip label={`Direct: ${formatDistance(directDistance)}`} size="small" variant="outlined" />}
+                    <IconButton size="small" onClick={() => setShowInfoDrawer(true)} aria-label="Route details">
+                      <InfoOutlined fontSize="small" />
+                    </IconButton>
+                  </Stack>
+                </Stack>
+              ) : (
+                <Stack direction="row" spacing={1.5} alignItems="center">
+                  <CircularProgress size={18} />
+                  <Typography variant="body2" color="text.secondary">Calculating route…</Typography>
+                </Stack>
+              )}
+            </Box>
           </motion.div>
         )}
       </AnimatePresence>
 
-      <Box sx={{ position: "absolute", top: 16, right: 16, zIndex: 1000, display: "flex", flexDirection: "column", gap: 1 }}>
-        <Tooltip title="My Location"><IconButton size="small" onClick={getCurrentLocation} sx={{ bgcolor: "white", boxShadow: 2 }}><MyLocation fontSize="small" /></IconButton></Tooltip>
-        <Tooltip title="Provider"><IconButton size="small" onClick={() => mapInstanceRef.current?.setView(provider, 16)} sx={{ bgcolor: "white", boxShadow: 2 }}><Storefront fontSize="small" /></IconButton></Tooltip>
-        <Tooltip title="Customer"><IconButton size="small" onClick={() => mapInstanceRef.current?.setView(customer, 16)} sx={{ bgcolor: "white", boxShadow: 2 }}><Person fontSize="small" /></IconButton></Tooltip>
-      </Box>
-
-      <Box sx={{ position: "absolute", bottom: 80, left: 16, zIndex: 1000 }}>
-        <Paper sx={{ p: 0.5, display: "flex", gap: 0.5, boxShadow: 2 }}>
-          <Tooltip title="Street"><IconButton size="small" onClick={() => setTileLayer("street")} sx={{ bgcolor: tileLayer === "street" ? "primary.main" : "transparent", color: tileLayer === "street" ? "white" : "inherit" }}><MapIcon fontSize="small" /></IconButton></Tooltip>
-          <Tooltip title="Satellite"><IconButton size="small" onClick={() => setTileLayer("satellite")} sx={{ bgcolor: tileLayer === "satellite" ? "primary.main" : "transparent", color: tileLayer === "satellite" ? "white" : "inherit" }}><SatelliteAlt fontSize="small" /></IconButton></Tooltip>
-        </Paper>
-      </Box>
-
-      {showRouting && (
-        <Box sx={{ position: "absolute", top: 16, left: 16, zIndex: 1000 }}>
-          <Paper sx={{ p: 0.5, display: "flex", gap: 0.5, boxShadow: 2 }}>
-            {Object.entries(TRAVEL_MODES).map(([mode, cfg]) => {
-              const Icon = cfg.icon;
-              return <Tooltip key={mode} title={cfg.label}><IconButton size="small" onClick={() => setCurrentTravelMode(mode)} sx={{ bgcolor: currentTravelMode === mode ? cfg.color : "transparent", color: currentTravelMode === mode ? "white" : "inherit" }}><Icon fontSize="small" /></IconButton></Tooltip>;
-            })}
-          </Paper>
-        </Box>
-      )}
-
-      <Drawer anchor="bottom" open={showInfoDrawer} onClose={() => setShowInfoDrawer(false)} PaperProps={{ sx: { borderRadius: "16px 16px 0 0", maxHeight: "70vh" } }}>
+      <Drawer
+        anchor="bottom"
+        open={showInfoDrawer}
+        onClose={() => setShowInfoDrawer(false)}
+        ModalProps={{ container: isFullscreen ? outerRef.current : undefined }}
+        PaperProps={{ sx: { borderRadius: "16px 16px 0 0", maxHeight: "70vh" } }}
+      >
         <Box sx={{ p: 3 }}>
-          <Stack direction="row" justifyContent="space-between" alignItems="center" mb={2}><Typography variant="h6" fontWeight={700}>Route Details</Typography><IconButton onClick={() => setShowInfoDrawer(false)}><Close /></IconButton></Stack>
+          <Stack direction="row" justifyContent="space-between" alignItems="center" mb={2}>
+            <Typography variant="h6" fontWeight={700}>Route details</Typography>
+            <IconButton onClick={() => setShowInfoDrawer(false)} aria-label="Close"><Close /></IconButton>
+          </Stack>
           <Divider sx={{ mb: 2 }} />
           <List dense>
-            <ListItem><ListItemText primary="Provider" secondary={`${provider.lat.toFixed(6)}, ${provider.lng.toFixed(6)}`} /></ListItem>
-            <ListItem><ListItemText primary="Customer" secondary={`${customer.lat.toFixed(6)}, ${customer.lng.toFixed(6)}`} /></ListItem>
-            {directDistance && <ListItem><ListItemText primary="Direct Distance" secondary={formatDistance(directDistance)} /></ListItem>}
-            {routeInfo && <><ListItem><ListItemText primary="Route Distance" secondary={formatDistance(routeInfo.distance)} /></ListItem><ListItem><ListItemText primary="ETA" secondary={formatDuration(routeInfo.duration)} /></ListItem></>}
+            <ListItem><ListItemText primary={safeProvider.name || "Provider"} secondary={`${safeProvider.lat.toFixed(6)}, ${safeProvider.lng.toFixed(6)}`} /></ListItem>
+            <ListItem><ListItemText primary="Customer" secondary={safeCustomer.address || `${safeCustomer.lat.toFixed(6)}, ${safeCustomer.lng.toFixed(6)}`} /></ListItem>
+            {directDistance !== null && <ListItem><ListItemText primary="Direct distance" secondary={formatDistance(directDistance)} /></ListItem>}
+            {routeInfo && (
+              <>
+                <ListItem><ListItemText primary="Route distance" secondary={`${approx}${formatDistance(routeInfo.distance)}`} /></ListItem>
+                <ListItem><ListItemText primary="ETA" secondary={`${approx}${formatDuration(routeInfo.duration)}`} /></ListItem>
+              </>
+            )}
           </List>
-          <Typography variant="caption" color="text.secondary" sx={{ mt: 2, display: "block" }}>* Approximate, varies with traffic</Typography>
+          <Typography variant="caption" color="text.secondary" sx={{ mt: 2, display: "block" }}>
+            {routeInfo?.isEstimate
+              ? "Estimated from the straight-line distance because a road route could not be loaded."
+              : "Approximate. Actual time varies with traffic and conditions."}
+          </Typography>
         </Box>
       </Drawer>
     </Box>
   );
 };
 
+const coordShape = {
+  lat: PropTypes.oneOfType([PropTypes.number, PropTypes.string]),
+  lng: PropTypes.oneOfType([PropTypes.number, PropTypes.string]),
+};
+
 BookingMap.propTypes = {
-  provider: PropTypes.shape({ lat: PropTypes.number.isRequired, lng: PropTypes.number.isRequired, name: PropTypes.string, address: PropTypes.string }),
-  customer: PropTypes.shape({ lat: PropTypes.number.isRequired, lng: PropTypes.number.isRequired, address: PropTypes.string }),
+  provider: PropTypes.shape({ ...coordShape, name: PropTypes.string, address: PropTypes.string }),
+  customer: PropTypes.shape({ ...coordShape, address: PropTypes.string }),
   height: PropTypes.oneOfType([PropTypes.string, PropTypes.number]),
   width: PropTypes.oneOfType([PropTypes.string, PropTypes.number]),
   showRouting: PropTypes.bool,
@@ -364,7 +651,9 @@ BookingMap.propTypes = {
   travelMode: PropTypes.oneOf(["driving", "walking", "cycling"]),
   onRouteInfo: PropTypes.func,
   zoom: PropTypes.number,
-  center: PropTypes.shape({ lat: PropTypes.number, lng: PropTypes.number }),
+  center: PropTypes.shape(coordShape),
+  autoFit: PropTypes.bool,
+  scrollWheelZoom: PropTypes.bool,
   className: PropTypes.string,
 };
 

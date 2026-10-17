@@ -1,49 +1,93 @@
-// src/hooks/useAdminDashboardSocket.js - v7.0 PUNE SENIOR FINAL
-import { useEffect, useState, useCallback, useRef, useMemo } from 'react';
-import { Client } from '@stomp/stompjs';
-import SockJS from 'sockjs-client';
-import { toast } from 'react-toastify';
-import { TokenManager, API_BASE_URL, WS_URL, SOCKJS_BASE } from '../api/api';
+// src/hooks/useAdminDashboardSocket.js
+import { useEffect, useState, useCallback, useRef, useMemo } from "react";
+import { Client } from "@stomp/stompjs";
+import SockJS from "sockjs-client";
+import { toast } from "react-toastify";
+import * as apiModule from "../api/api";
+
+/* ============================== Config ============================== */
 
 const CONFIG = {
   MAX_RECONNECT_ATTEMPTS: 10,
   BASE_DELAY: 1000,
   MAX_DELAY: 30000,
   HEARTBEAT: 10000,
-  TIMEOUT: 15000,
+  CONNECT_TIMEOUT: 15000,
+  STABLE_AFTER: 10000, // a connection must survive this long before retry counters reset
+  TOKEN_REFRESH_SKEW: 60000,
   MAX_ALERTS: 50,
 };
 
 export const TOPICS = {
-  ADMIN_ALERTS: '/topic/admin/alerts',
-  ADMIN_STATS: '/topic/admin/stats',
-  ADMIN_DASHBOARD: '/topic/admin/dashboard',
-  BOOKINGS: '/topic/bookings',
-  PROVIDERS: '/topic/providers',
-  USERS: '/topic/users',
+  ADMIN_ALERTS: "/topic/admin/alerts",
+  ADMIN_STATS: "/topic/admin/stats",
+  ADMIN_DASHBOARD: "/topic/admin/dashboard",
+  BOOKINGS: "/topic/bookings",
+  PROVIDERS: "/topic/providers",
+  USERS: "/topic/users",
 };
 
 export const CONNECTION_STATE = {
-  DISCONNECTED: 'disconnected',
-  CONNECTING: 'connecting',
-  CONNECTED: 'connected',
-  RECONNECTING: 'reconnecting',
-  ERROR: 'error',
-  FAILED: 'failed',
-  AUTH_ERROR: 'auth_error',
+  DISCONNECTED: "disconnected",
+  CONNECTING: "connecting",
+  CONNECTED: "connected",
+  RECONNECTING: "reconnecting",
+  ERROR: "error",
+  FAILED: "failed",
+  AUTH_ERROR: "auth_error",
 };
+
+// Set VITE_WS_NATIVE=true to use a plain WebSocket (brokerURL) instead of SockJS.
+// This also removes SockJS's "unload" permissions-policy console warning.
+// Requires a raw (non-SockJS) STOMP endpoint on the server.
+const USE_NATIVE_WS = import.meta.env?.VITE_WS_NATIVE === "true";
+
+/* ============================== Helpers ============================== */
 
 const genId = () => `${Date.now()}-${Math.random().toString(36).slice(2, 9)}`;
 
-const getToken = () => TokenManager.getAccessToken();
+// api.js exports the token helper as TokenManager in some files and tokenManager in others.
+const tokenApi = () => apiModule.TokenManager || apiModule.tokenManager || null;
 
-const shouldRefreshToken = (token) => {
-  if (!token) return true;
-  try {
-    const payload = JSON.parse(atob(token.split('.')[1]));
-    return payload.exp * 1000 - Date.now() < 60000;
-  } catch { return true; }
+const getToken = () => {
+  try { return tokenApi()?.getAccessToken?.() ?? null; } catch { return null; }
 };
+
+// Optional: uses whichever refresh helper api.js exposes. Returns the new token or null.
+const refreshAccessToken = async () => {
+  const tm = tokenApi();
+  const fn = apiModule.refreshAccessToken || apiModule.refreshToken || tm?.refreshAccessToken || tm?.refreshToken || tm?.refresh;
+  if (typeof fn !== "function") return null;
+  try {
+    await fn.call(tm);
+    return getToken();
+  } catch {
+    return null;
+  }
+};
+
+// Milliseconds until the JWT expires. Infinity if it cannot be decoded (opaque tokens).
+const tokenExpiresInMs = (token) => {
+  try {
+    let part = token.split(".")[1].replace(/-/g, "+").replace(/_/g, "/");
+    part = part.padEnd(Math.ceil(part.length / 4) * 4, "=");
+    const json = decodeURIComponent(atob(part).split("").map((c) => `%${c.charCodeAt(0).toString(16).padStart(2, "0")}`).join(""));
+    const { exp } = JSON.parse(json);
+    return exp ? exp * 1000 - Date.now() : Infinity;
+  } catch {
+    return Infinity;
+  }
+};
+
+const httpBase = () => {
+  const raw = apiModule.SOCKJS_BASE
+    || (() => { try { return new URL(apiModule.API_BASE_URL || "", window.location.origin).origin; } catch { return window.location.origin; } })();
+  return String(raw).replace(/^ws/i, "http").replace(/\/+$/, "");
+};
+const sockJsUrl = () => `${httpBase()}/ws`;
+const brokerUrl = () => apiModule.WS_URL || `${httpBase().replace(/^http/i, "ws")}/ws`;
+
+/* ============================== Hook ============================== */
 
 export default function useAdminDashboardSocket(options = {}) {
   const {
@@ -53,7 +97,8 @@ export default function useAdminDashboardSocket(options = {}) {
     onAlert,
     onStatsUpdate,
     onConnectionChange,
-    debug = import.meta.env.DEV,
+    appHeartbeat = false, // extra app-level heartbeat to /app/heartbeat; STOMP heartbeats already keep the link alive
+    debug = Boolean(import.meta.env?.DEV),
   } = options;
 
   const [isConnected, setIsConnected] = useState(false);
@@ -62,278 +107,340 @@ export default function useAdminDashboardSocket(options = {}) {
   const [lastUpdated, setLastUpdated] = useState(null);
   const [alerts, setAlerts] = useState([]);
   const [connectionState, setConnectionState] = useState(CONNECTION_STATE.DISCONNECTED);
+  const [reconnectAttempt, setReconnectAttempt] = useState(0);
 
+  const mountedRef = useRef(true);
+  const shouldRunRef = useRef(false);
   const clientRef = useRef(null);
   const subsRef = useRef(new Map());
-  const mountedRef = useRef(true);
-  const reconnectAttempts = useRef(0);
-  const reconnectTimer = useRef(null);
-  const heartbeatTimer = useRef(null);
-  const isConnectingRef = useRef(false);
+  const generationRef = useRef(0);
+  const connectingRef = useRef(false);
+  const attemptRef = useRef(0);
+  const authRetriedRef = useRef(false);
+  const wasLostRef = useRef(false);
+  const stateRef = useRef(CONNECTION_STATE.DISCONNECTED);
+  const reconnectTimerRef = useRef(null);
+  const connectTimerRef = useRef(null);
+  const stableTimerRef = useRef(null);
+  const heartbeatTimerRef = useRef(null);
+  const connectRef = useRef(null);
 
-  const callbacksRef = useRef({ onAlert, onStatsUpdate, onConnectionChange });
-  useEffect(() => {
-    callbacksRef.current = { onAlert, onStatsUpdate, onConnectionChange };
-  }, [onAlert, onStatsUpdate, onConnectionChange]);
+  // Always-current options, without re-creating callbacks (and therefore without reconnecting).
+  const optsRef = useRef({});
+  optsRef.current = { enableRealTime, autoConnect, maxAlerts, onAlert, onStatsUpdate, onConnectionChange, appHeartbeat, debug };
 
-  const cleanup = useCallback(() => {
-    if (reconnectTimer.current) clearTimeout(reconnectTimer.current);
-    if (heartbeatTimer.current) clearInterval(heartbeatTimer.current);
-    reconnectTimer.current = null;
-    heartbeatTimer.current = null;
-    isConnectingRef.current = false;
+  const log = useCallback((...a) => { if (optsRef.current.debug) console.log("[AdminSocket]", ...a); }, []);
+
+  const transition = useCallback((state, err = null) => {
+    stateRef.current = state;
+    if (!mountedRef.current) return;
+    setConnectionState(state);
+    setIsConnected(state === CONNECTION_STATE.CONNECTED);
+    setIsConnecting(state === CONNECTION_STATE.CONNECTING);
+    setError(err);
+    optsRef.current.onConnectionChange?.({ connected: state === CONNECTION_STATE.CONNECTED, state, error: err });
   }, []);
 
-  const handleAlert = useCallback((data) => {
-    if (!mountedRef.current) return;
-    const alert = { id: data.id || genId(), timestamp: new Date().toISOString(), read: false,...data };
-    setAlerts(prev => {
-      if (prev.some(a => a.id === alert.id)) return prev;
-      return [alert,...prev].slice(0, maxAlerts);
-    });
-    setLastUpdated(new Date());
-    callbacksRef.current.onAlert?.(alert);
+  const clearTimers = useCallback(() => {
+    [reconnectTimerRef, connectTimerRef, stableTimerRef].forEach((r) => { clearTimeout(r.current); r.current = null; });
+    clearInterval(heartbeatTimerRef.current);
+    heartbeatTimerRef.current = null;
+  }, []);
 
-    // Toast only for critical
-    if (data.severity === 'critical') {
-      toast.error(`🔴 ${data.title || data.message}`, { autoClose: false, toastId: `crit-${alert.id}` });
+  // Detach a client without letting its late callbacks (close, error) trigger anything.
+  const teardown = useCallback((client) => {
+    subsRef.current.forEach((s) => { try { s.unsubscribe(); } catch { /* already gone */ } });
+    subsRef.current.clear();
+    if (!client) return;
+    client.onConnect = null;
+    client.onStompError = null;
+    client.onWebSocketClose = null;
+    client.onWebSocketError = null;
+    Promise.resolve().then(() => client.deactivate()).catch(() => { /* ignore */ });
+  }, []);
+
+  const handleAlert = useCallback((raw) => {
+    if (!mountedRef.current) return;
+    const data = raw && typeof raw === "object" ? raw : { message: String(raw ?? "") };
+    const alert = { id: data.id || genId(), timestamp: new Date().toISOString(), read: false, ...data };
+    setAlerts((prev) => (prev.some((a) => a.id === alert.id) ? prev : [alert, ...prev].slice(0, optsRef.current.maxAlerts)));
+    setLastUpdated(new Date());
+    optsRef.current.onAlert?.(alert);
+    if (String(data.severity).toLowerCase() === "critical") {
+      toast.error(`Critical: ${data.title || data.message || "Alert"}`, { autoClose: false, toastId: `crit-${alert.id}` });
     }
-  }, [maxAlerts]);
+  }, []);
 
   const subscribe = useCallback((client) => {
-    if (!client?.connected) return;
-
-    // Clear old subs
-    subsRef.current.forEach(s => { try { s.unsubscribe(); } catch {} });
-    subsRef.current.clear();
-
-    const configs = [
-      { topic: TOPICS.ADMIN_DASHBOARD, handler: (d) => { setLastUpdated(new Date()); callbacksRef.current.onStatsUpdate?.(d); } },
-      { topic: TOPICS.ADMIN_STATS, handler: (d) => { setLastUpdated(new Date()); callbacksRef.current.onStatsUpdate?.(d); } },
+    const onStats = (d) => { setLastUpdated(new Date()); optsRef.current.onStatsUpdate?.(d); };
+    [
+      { topic: TOPICS.ADMIN_DASHBOARD, handler: onStats },
+      { topic: TOPICS.ADMIN_STATS, handler: onStats },
       { topic: TOPICS.ADMIN_ALERTS, handler: handleAlert },
-    ];
-
-    configs.forEach(({ topic, handler }) => {
+    ].forEach(({ topic, handler }) => {
       try {
         const sub = client.subscribe(topic, (msg) => {
-          try { handler(JSON.parse(msg.body)); } catch (e) { console.error(`Parse ${topic}`, e); }
+          try { handler(JSON.parse(msg.body)); } catch (e) { log(`Bad payload on ${topic}`, e?.message); }
         });
         subsRef.current.set(topic, sub);
-        debug && console.log(`✅ Sub ${topic}`);
-      } catch (e) { console.error(`Sub fail ${topic}`, e); }
+        log("Subscribed", topic);
+      } catch (e) { console.error(`[AdminSocket] subscribe failed for ${topic}`, e?.message); }
     });
-  }, [handleAlert, debug]);
+  }, [handleAlert, log]);
 
   const scheduleReconnect = useCallback(() => {
-    if (!mountedRef.current ||!enableRealTime) return;
-    if (reconnectAttempts.current >= CONFIG.MAX_RECONNECT_ATTEMPTS) {
-      setConnectionState(CONNECTION_STATE.FAILED);
-      setError('Realtime failed. Refresh page.');
-      setIsConnecting(false);
-      callbacksRef.current.onConnectionChange?.({ connected: false, state: CONNECTION_STATE.FAILED });
+    if (!mountedRef.current || !shouldRunRef.current || !optsRef.current.enableRealTime) return;
+    clearTimeout(reconnectTimerRef.current);
+    if (typeof navigator !== "undefined" && navigator.onLine === false) {
+      transition(CONNECTION_STATE.RECONNECTING, "You are offline. Live updates resume when you reconnect.");
+      return; // the "online" listener restarts the connection
+    }
+    if (attemptRef.current >= CONFIG.MAX_RECONNECT_ATTEMPTS) {
+      transition(CONNECTION_STATE.FAILED, "Live updates are unavailable. The dashboard will keep refreshing on a timer.");
       return;
     }
-    reconnectAttempts.current++;
-    const delay = Math.min(CONFIG.BASE_DELAY * Math.pow(1.6, reconnectAttempts.current - 1), CONFIG.MAX_DELAY);
-    debug && console.log(`🔄 Reconnect ${reconnectAttempts.current} in ${delay}ms`);
+    attemptRef.current += 1;
+    setReconnectAttempt(attemptRef.current);
+    const base = Math.min(CONFIG.BASE_DELAY * 1.6 ** (attemptRef.current - 1), CONFIG.MAX_DELAY);
+    const delay = Math.round(base * (0.75 + Math.random() * 0.5)); // jitter avoids reconnect storms
+    log(`Reconnect ${attemptRef.current}/${CONFIG.MAX_RECONNECT_ATTEMPTS} in ${delay}ms`);
+    transition(CONNECTION_STATE.RECONNECTING, null);
+    reconnectTimerRef.current = setTimeout(() => connectRef.current?.(), delay);
+  }, [transition, log]);
 
-    setConnectionState(CONNECTION_STATE.RECONNECTING);
-    cleanup();
-    reconnectTimer.current = setTimeout(() => {
-      if (mountedRef.current &&!isConnected &&!isConnectingRef.current) connect();
-    }, delay);
-  }, [enableRealTime, debug, cleanup, isConnected]);
+  const connectInternal = useCallback(async () => {
+    if (!mountedRef.current || !shouldRunRef.current || !optsRef.current.enableRealTime) return;
+    if (connectingRef.current || clientRef.current?.connected) return;
+    connectingRef.current = true;
+    clearTimeout(reconnectTimerRef.current);
 
-  const connect = useCallback(() => {
-    if (!enableRealTime) return;
-    if (isConnectingRef.current || clientRef.current?.connected) return;
-
-    const token = getToken();
+    let token = getToken();
     if (!token) {
-      setConnectionState(CONNECTION_STATE.AUTH_ERROR);
-      setError('Auth required for realtime');
+      connectingRef.current = false;
+      transition(CONNECTION_STATE.AUTH_ERROR, "Sign in is required for live updates.");
       return;
     }
+    transition(CONNECTION_STATE.CONNECTING);
 
-    if (shouldRefreshToken(token)) {
-      debug && console.log('Token expiring soon');
+    // Never connect with an expired token: refresh first, or stop.
+    if (tokenExpiresInMs(token) < CONFIG.TOKEN_REFRESH_SKEW) {
+      const fresh = await refreshAccessToken();
+      if (!mountedRef.current || !shouldRunRef.current) { connectingRef.current = false; return; }
+      if (fresh) token = fresh;
+      if (tokenExpiresInMs(token) <= 0) {
+        connectingRef.current = false;
+        transition(CONNECTION_STATE.AUTH_ERROR, "Your session has expired.");
+        window.dispatchEvent(new Event("auth:expired"));
+        return;
+      }
     }
 
-    isConnectingRef.current = true;
-    setIsConnecting(true);
-    setError(null);
-    setConnectionState(CONNECTION_STATE.CONNECTING);
+    const gen = ++generationRef.current;
+    const isCurrent = () => mountedRef.current && gen === generationRef.current;
+    let lost = false;
+    let client;
+
+    // Single exit path for every failure, so one drop is counted exactly once.
+    const lose = ({ auth = false, message = "Connection lost" } = {}) => {
+      if (lost || !isCurrent()) return;
+      lost = true;
+      clearTimeout(connectTimerRef.current);
+      clearTimeout(stableTimerRef.current);
+      clearInterval(heartbeatTimerRef.current);
+      connectingRef.current = false;
+      wasLostRef.current = true;
+      teardown(client);
+      if (clientRef.current === client) clientRef.current = null;
+      log("Lost:", message);
+
+      if (auth) {
+        if (authRetriedRef.current) {
+          transition(CONNECTION_STATE.AUTH_ERROR, "Live updates are not permitted for this session.");
+          toast.error("Live updates need a fresh sign-in.", { toastId: "ws-auth" });
+          return; // no more retries: they would only hammer the server with a rejected token
+        }
+        authRetriedRef.current = true;
+        transition(CONNECTION_STATE.RECONNECTING, "Refreshing session for live updates...");
+        refreshAccessToken().finally(() => { if (mountedRef.current && shouldRunRef.current) scheduleReconnect(); });
+        return;
+      }
+      transition(CONNECTION_STATE.ERROR, message);
+      scheduleReconnect();
+    };
 
     try {
-      // SENIOR FIX: SockJS needs HTTP URL, NOT WSS
-      // And SockJS 2nd param is NOT options - it's reserved!
-      // Wrong: new SockJS(url, null, {transports:[]}) -> causes [object Object] bug
-      // Correct: new SockJS(url)
-      const httpUrl = `${SOCKJS_BASE}/ws`;
-      debug && console.log('🌐 SockJS URL (HTTP):', httpUrl);
-
-      const socket = new SockJS(httpUrl); // FIXED: Only URL param
-
-      const client = new Client({
-        webSocketFactory: () => socket,
-        connectHeaders: {
-          Authorization: `Bearer ${token}`,
-          'X-Client-Type': 'admin-dashboard',
-          'X-Connection-Id': `admin-${genId()}`,
-        },
-        reconnectDelay: 0, // We handle reconnect
+      client = new Client({
+        ...(USE_NATIVE_WS ? { brokerURL: brokerUrl() } : { webSocketFactory: () => new SockJS(sockJsUrl()) }),
+        connectHeaders: { Authorization: `Bearer ${token}`, "X-Client-Type": "admin-dashboard" },
+        reconnectDelay: 0, // reconnection is handled here, with backoff
         heartbeatIncoming: CONFIG.HEARTBEAT,
         heartbeatOutgoing: CONFIG.HEARTBEAT,
-        debug: (str) => {
-          if (debug &&!str.includes('PING') &&!str.includes('PONG')) {
-            // console.log('STOMP:', str);
-          }
-        },
+        debug: () => {},
       });
 
       client.onConnect = () => {
-        if (!mountedRef.current) return;
-        console.log('✅ WS Connected');
-        isConnectingRef.current = false;
-        setIsConnected(true);
-        setIsConnecting(false);
-        setConnectionState(CONNECTION_STATE.CONNECTED);
+        if (!isCurrent() || lost) return;
+        clearTimeout(connectTimerRef.current);
+        connectingRef.current = false;
+        const recovered = wasLostRef.current;
+        wasLostRef.current = false;
+        transition(CONNECTION_STATE.CONNECTED);
         setLastUpdated(new Date());
-        setError(null);
-        reconnectAttempts.current = 0;
-        cleanup();
-
+        log("Connected");
         subscribe(client);
 
-        // Heartbeat publish
-        heartbeatTimer.current = setInterval(() => {
-          if (client.connected) {
-            try { client.publish({ destination: '/app/heartbeat', body: JSON.stringify({ ts: Date.now() }) }); } catch {}
-          }
-        }, CONFIG.HEARTBEAT);
+        // Retry counters only reset once the link has proven stable, so a server that accepts
+        // CONNECT but rejects SUBSCRIBE cannot cause a tight reconnect loop.
+        clearTimeout(stableTimerRef.current);
+        stableTimerRef.current = setTimeout(() => {
+          attemptRef.current = 0;
+          authRetriedRef.current = false;
+          if (mountedRef.current) setReconnectAttempt(0);
+        }, CONFIG.STABLE_AFTER);
 
-        callbacksRef.current.onConnectionChange?.({ connected: true, state: CONNECTION_STATE.CONNECTED });
-        toast.success('Live connected', { autoClose: 2000, toastId: 'ws-ok' });
+        if (optsRef.current.appHeartbeat) {
+          clearInterval(heartbeatTimerRef.current);
+          heartbeatTimerRef.current = setInterval(() => {
+            if (!client.connected) return;
+            try { client.publish({ destination: "/app/heartbeat", body: JSON.stringify({ ts: Date.now() }) }); } catch { /* ignore */ }
+          }, CONFIG.HEARTBEAT);
+        }
+        if (recovered) toast.success("Live updates restored", { autoClose: 2000, toastId: "ws-ok" });
       };
 
       client.onStompError = (frame) => {
-        if (!mountedRef.current) return;
-        const msg = frame.headers?.message || 'STOMP error';
-        const isAuth = /auth|jwt|unauthorized|invalid token/i.test(msg);
-
-        console.error('STOMP error', msg);
-        isConnectingRef.current = false;
-        setIsConnected(false);
-        setIsConnecting(false);
-        setConnectionState(isAuth? CONNECTION_STATE.AUTH_ERROR : CONNECTION_STATE.ERROR);
-        setError(isAuth? 'Auth failed for realtime' : msg);
-
-        if (isAuth) {
-          toast.error('Session expired for live updates', { toastId: 'ws-auth' });
-        } else {
-          scheduleReconnect();
-        }
+        const detail = `${frame?.headers?.message || ""} ${frame?.body || ""}`;
+        // "Failed to send message to ExecutorSubscribableChannel[clientInboundChannel]" means a
+        // server-side interceptor threw on CONNECT or SUBSCRIBE: treat it as an auth/permission failure.
+        const channelFailure = /clientInboundChannel|Failed to send message/i.test(detail);
+        const authFailure = channelFailure || /auth|jwt|token|unauthori[sz]ed|forbidden|denied|expired/i.test(detail);
+        console.error("[AdminSocket] STOMP error:", (frame?.headers?.message || "unknown").slice(0, 200));
+        lose({ auth: authFailure, message: frame?.headers?.message || "Realtime error" });
       };
 
-      client.onWebSocketError = () => {
-        if (!mountedRef.current) return;
-        isConnectingRef.current = false;
-        setIsConnected(false);
-        setIsConnecting(false);
-        setConnectionState(CONNECTION_STATE.ERROR);
-        scheduleReconnect();
-      };
+      // The close event is what actually fires when a link drops (server restart, idle timeout, network).
+      client.onWebSocketClose = () => lose({ message: "Connection closed" });
+      client.onWebSocketError = () => lose({ message: "Cannot reach the realtime server" });
 
-      client.onDisconnect = () => {
-        if (!mountedRef.current) return;
-        if (heartbeatTimer.current) clearInterval(heartbeatTimer.current);
-        isConnectingRef.current = false;
-        setIsConnected(false);
-        setIsConnecting(false);
-        setConnectionState(CONNECTION_STATE.DISCONNECTED);
-        scheduleReconnect();
-      };
-
-      client.activate();
       clientRef.current = client;
-
-      // Connection timeout
-      setTimeout(() => {
-        if (isConnectingRef.current &&!client.connected) {
-          try { client.deactivate(); } catch {}
-          scheduleReconnect();
-        }
-      }, CONFIG.TIMEOUT);
-
+      connectTimerRef.current = setTimeout(() => lose({ message: "Realtime connection timed out" }), CONFIG.CONNECT_TIMEOUT);
+      client.activate();
     } catch (e) {
-      console.error('WS create fail', e);
-      isConnectingRef.current = false;
-      setIsConnected(false);
-      setIsConnecting(false);
-      setConnectionState(CONNECTION_STATE.ERROR);
-      setError(e.message);
-      scheduleReconnect();
+      console.error("[AdminSocket] could not create connection", e?.message);
+      lose({ message: e?.message || "Could not start realtime" });
     }
-  }, [enableRealTime, debug, subscribe, scheduleReconnect, cleanup]);
+  }, [transition, subscribe, scheduleReconnect, teardown, log]);
+
+  connectRef.current = connectInternal;
+
+  /* ---------- Public controls ---------- */
+
+  const shutdown = useCallback(() => {
+    shouldRunRef.current = false;
+    clearTimers();
+    generationRef.current += 1; // invalidates every late callback from the old client
+    teardown(clientRef.current);
+    clientRef.current = null;
+    connectingRef.current = false;
+    attemptRef.current = 0;
+    authRetriedRef.current = false;
+    wasLostRef.current = false;
+  }, [clearTimers, teardown]);
+
+  const connect = useCallback(() => {
+    if (!optsRef.current.enableRealTime) return;
+    shouldRunRef.current = true;
+    connectRef.current?.();
+  }, []);
 
   const disconnect = useCallback(() => {
-    cleanup();
-    subsRef.current.forEach(s => { try { s.unsubscribe(); } catch {} });
-    subsRef.current.clear();
-    if (clientRef.current) { try { clientRef.current.deactivate(); } catch {} }
-    clientRef.current = null;
-    isConnectingRef.current = false;
-    setIsConnected(false);
-    setIsConnecting(false);
-    setConnectionState(CONNECTION_STATE.DISCONNECTED);
-    reconnectAttempts.current = 0;
-  }, [cleanup]);
+    shutdown();
+    setReconnectAttempt(0);
+    transition(CONNECTION_STATE.DISCONNECTED);
+  }, [shutdown, transition]);
 
   const reconnect = useCallback(() => {
-    disconnect();
-    setTimeout(() => mountedRef.current && enableRealTime && connect(), 500);
-  }, [disconnect, connect, enableRealTime]);
+    if (!mountedRef.current || !optsRef.current.enableRealTime) return;
+    clearTimers();
+    generationRef.current += 1;
+    teardown(clientRef.current);
+    clientRef.current = null;
+    connectingRef.current = false;
+    attemptRef.current = 0;
+    authRetriedRef.current = false;
+    setReconnectAttempt(0);
+    shouldRunRef.current = true;
+    connectRef.current?.();
+  }, [clearTimers, teardown]);
 
-  // Lifecycle
+  /* ---------- Lifecycle ---------- */
+
   useEffect(() => {
     mountedRef.current = true;
-    return () => { mountedRef.current = false; disconnect(); };
+    let startTimer = null;
+    if (enableRealTime && autoConnect) {
+      shouldRunRef.current = true;
+      startTimer = setTimeout(() => connectRef.current?.(), 250);
+    }
+    return () => {
+      clearTimeout(startTimer);
+      mountedRef.current = false;
+      shutdown();
+    };
+  }, [enableRealTime, autoConnect, shutdown]);
+
+  /* Network, tab visibility and auth events. */
+  useEffect(() => {
+    const kick = ({ force = false } = {}) => {
+      const o = optsRef.current;
+      if (!o.enableRealTime || !o.autoConnect || !shouldRunRef.current) return;
+      if (clientRef.current?.connected || connectingRef.current) return;
+      if (!force && stateRef.current === CONNECTION_STATE.AUTH_ERROR) return;
+      attemptRef.current = 0;
+      authRetriedRef.current = false;
+      connectRef.current?.();
+    };
+    const onOnline = () => kick();
+    const onVisible = () => { if (document.visibilityState === "visible") kick(); };
+    const onTokenEvent = () => kick({ force: true }); // new credentials may fix an auth error
+    const onLogout = () => disconnect();
+
+    window.addEventListener("online", onOnline);
+    document.addEventListener("visibilitychange", onVisible);
+    window.addEventListener("token-refreshed", onTokenEvent);
+    window.addEventListener("auth:login", onTokenEvent);
+    window.addEventListener("auth:logout", onLogout);
+    return () => {
+      window.removeEventListener("online", onOnline);
+      document.removeEventListener("visibilitychange", onVisible);
+      window.removeEventListener("token-refreshed", onTokenEvent);
+      window.removeEventListener("auth:login", onTokenEvent);
+      window.removeEventListener("auth:logout", onLogout);
+    };
   }, [disconnect]);
 
-  useEffect(() => {
-    if (!enableRealTime ||!autoConnect) return;
-    const token = getToken();
-    if (token) {
-      const t = setTimeout(() => { if (!isConnectingRef.current &&!clientRef.current?.connected) connect(); }, 300);
-      return () => clearTimeout(t);
-    }
-  }, [enableRealTime, autoConnect, connect]);
+  /* ---------- Alerts API ---------- */
 
-  // Token change listener
-  useEffect(() => {
-    const handler = () => { if (enableRealTime && getToken()) reconnect(); };
-    window.addEventListener('token-refreshed', handler);
-    window.addEventListener('auth:login', handler);
-    return () => {
-      window.removeEventListener('token-refreshed', handler);
-      window.removeEventListener('auth:login', handler);
-    };
-  }, [enableRealTime, reconnect]);
+  const unreadCount = useMemo(() => alerts.filter((a) => !a.read).length, [alerts]);
+  const markAlertAsRead = useCallback((id) => setAlerts((p) => p.map((a) => (a.id === id ? { ...a, read: true } : a))), []);
+  const markAllAlertsAsRead = useCallback(() => setAlerts((p) => p.map((a) => ({ ...a, read: true }))), []);
+  const clearAlerts = useCallback(() => setAlerts([]), []);
 
   return {
     connected: isConnected,
     connecting: isConnecting,
     connectionState,
+    reconnectAttempt,
     error,
     lastUpdated,
     alerts,
-    unreadCount: useMemo(() => alerts.filter(a =>!a.read).length, [alerts]),
-    markAlertAsRead: useCallback((id) => setAlerts(p => p.map(a => a.id === id? {...a, read: true } : a)), []),
-    markAllAlertsAsRead: useCallback(() => setAlerts(p => p.map(a => ({...a, read: true }))), []),
-    clearAlerts: useCallback(() => setAlerts([]), []),
+    unreadCount,
+    markAlertAsRead,
+    markAllAlertsAsRead,
+    clearAlerts,
     connect,
     disconnect,
     reconnect,
-    isHealthy: isConnected &&!error,
+    isHealthy: isConnected && !error,
   };
 }

@@ -1,8 +1,8 @@
-// src/components/admin/AdminDashboard.jsx - v13.0 PUNE SENIOR FINAL
-import React, { useState, useEffect, useCallback, useMemo, useRef, useId } from 'react';
-import { useNavigate } from "react-router-dom";
+// src/components/admin/AdminDashboard.jsx
+import React, { useState, useEffect, useCallback, useMemo, useRef, useId } from "react";
+import { useNavigate, useLocation } from "react-router-dom";
 import { useAuth } from "../../contexts/AuthContext";
-import { formatDistanceToNow, subDays } from "date-fns";
+import { formatDistanceToNow } from "date-fns";
 import { adminService } from "../../api/api";
 import LoadingSpinner from "../LoadingSpinner";
 import ErrorBoundary from "../ErrorBoundary";
@@ -10,304 +10,802 @@ import useAdminDashboardSocket from "../../hooks/useAdminDashboardSocket";
 import { toast, ToastContainer } from "react-toastify";
 import "react-toastify/dist/ReactToastify.css";
 import {
-  Box, Container, Stack, Paper, Typography, Button, IconButton,
-  TextField, InputAdornment, Switch, FormControlLabel, Avatar, Badge, Chip,
-  Skeleton, Alert, LinearProgress, CircularProgress, Table, TableBody, TableCell,
-  TableContainer, TableHead, TableRow, Drawer, Dialog, DialogTitle,
-  DialogContent, DialogActions, Menu, Tooltip, useMediaQuery, useTheme, MenuItem
-} from '@mui/material';
-import Grid from '@mui/material/Grid2';
+  Box, Container, Stack, Paper, Typography, Button, IconButton, TextField, InputAdornment,
+  Switch, FormControlLabel, Checkbox, Avatar, Badge, Chip, Skeleton, Alert, LinearProgress,
+  Table, TableBody, TableCell, TableContainer, TableHead, TableRow, Drawer, Dialog,
+  DialogTitle, DialogContent, DialogActions, Menu, MenuItem, Tooltip, ToggleButton,
+  ToggleButtonGroup, Divider, useMediaQuery, useTheme,
+} from "@mui/material";
+import Grid from "@mui/material/Grid2";
 import { styled, alpha } from "@mui/material/styles";
 import {
-  FaUsers, FaClipboardList, FaRupeeSign, FaCog, FaBolt, FaSync, FaShieldAlt,
-  FaBell, FaSearch, FaArrowUp, FaArrowDown, FaChartArea, FaChartBar, FaFileExport, FaTimes, FaUserCheck
+  FaUsers, FaClipboardList, FaRupeeSign, FaCog, FaBolt, FaSync, FaShieldAlt, FaBell, FaSearch,
+  FaArrowUp, FaArrowDown, FaFileExport, FaTimes, FaUserCheck, FaSignOutAlt, FaStar,
 } from "react-icons/fa";
-import { LocalizationProvider } from "@mui/x-date-pickers/LocalizationProvider";
-import { AdapterDateFns } from "@mui/x-date-pickers/AdapterDateFns";
-import { motion } from 'framer-motion';
-import { AreaChart, Area, XAxis, YAxis, CartesianGrid, Tooltip as RechartsTooltip, ResponsiveContainer, PieChart, Pie, Cell, BarChart, Bar } from 'recharts';
+import {
+  AreaChart, Area, XAxis, YAxis, CartesianGrid, Tooltip as RechartsTooltip, ResponsiveContainer,
+  PieChart, Pie, Cell, BarChart, Bar,
+} from "recharts";
+
+/* ============================== Config ============================== */
+
+const ADMIN_ROLES = new Set(["ADMIN", "SUPER_ADMIN"]);
+const ALL_PANELS = ["stats", "providers", "revenue", "bookings", "topProviders", "demand", "activities"];
+const REVENUE_RANGES = [7, 30, 90];
+const INTERVAL_OPTIONS = [15, 30, 60, 120];
+const PREF_KEY = "quickks_admin_prefs";
 
 const COLORS = {
-  primary: '#6366f1', success: '#10b981', warning: '#f59e0b', danger: '#ef4444', info: '#3b82f6',
-  purple: '#8b5cf6', pink: '#ec4899',
-  text: { muted: '#64748b', secondary: '#475569' },
-  bg: { main: '#f8fafc' }, border: '#e2e8f0', borderLight: '#f1f5f9',
+  primary: "#6366f1", success: "#10b981", warning: "#f59e0b", danger: "#ef4444", info: "#3b82f6",
+  muted: "#64748b", secondary: "#475569", bg: "#f8fafc", border: "#e2e8f0", borderLight: "#f1f5f9",
 };
-const CHART_COLORS = ['#6366f1','#10b981','#f59e0b','#ef4444','#8b5cf6','#ec4899'];
-
-// Stable color - no flicker
-const COLOR_MAP = new Map();
-const getStableColor = (name) => {
-  if (!name) return CHART_COLORS[0];
-  if (COLOR_MAP.has(name)) return COLOR_MAP.get(name);
-  const c = CHART_COLORS[COLOR_MAP.size % CHART_COLORS.length];
-  COLOR_MAP.set(name, c);
-  return c;
+const CHART_COLORS = ["#6366f1", "#10b981", "#f59e0b", "#ef4444", "#8b5cf6", "#ec4899"];
+const STATUS_COLORS = {
+  PENDING: COLORS.warning, CONFIRMED: COLORS.info, ASSIGNED: COLORS.info, IN_PROGRESS: COLORS.primary,
+  COMPLETED: COLORS.success, CANCELLED: COLORS.danger, REJECTED: COLORS.danger, REFUNDED: COLORS.muted,
 };
 
-const GlassCard = styled(Paper)(({ theme }) => ({
-  background: 'rgba(255,255,255,0.95)', backdropFilter: 'blur(12px)', border: `1px solid ${COLORS.border}`,
-  borderRadius: 20, padding: 20, transition: 'all 0.25s', boxShadow: '0 2px 12px rgba(0,0,0,0.04)',
-  [theme.breakpoints.down('sm')]: { backdropFilter: 'none', background: '#fff', padding: 14, borderRadius: 14 }
+/* ============================== Helpers ============================== */
+
+const isCanceled = (e) => e?.name === "CanceledError" || e?.name === "AbortError" || e?.code === "ERR_CANCELED";
+const normalizeRole = (r) => String(r || "").toUpperCase().replace(/^ROLE_/, "");
+const num = (v) => { const n = Number(v); return Number.isFinite(n) ? n : 0; };
+const fmtNum = (n) => new Intl.NumberFormat("en-IN").format(Math.round(num(n)));
+const fmtINR = (n) => new Intl.NumberFormat("en-IN", { style: "currency", currency: "INR", maximumFractionDigits: 0 }).format(num(n));
+const fmtCompact = (n) => new Intl.NumberFormat("en-IN", { notation: "compact", maximumFractionDigits: 1 }).format(num(n));
+
+const safeDistance = (value) => {
+  if (!value) return "";
+  const d = new Date(value);
+  return Number.isNaN(d.getTime()) ? "" : formatDistanceToNow(d, { addSuffix: true });
+};
+
+// Accepts [..], {data:[..]}, {content:[..]}, {data:{content:[..]}} and similar wrappers.
+const toArray = (payload, depth = 0) => {
+  if (Array.isArray(payload)) return payload;
+  if (!payload || typeof payload !== "object" || depth > 3) return [];
+  const inner = payload.data ?? payload.content ?? payload.items ?? payload.results ?? payload.records;
+  return inner === undefined ? [] : toArray(inner, depth + 1);
+};
+
+const STAT_KEYS = [
+  "totalUsers", "activeUsers", "newUsersToday", "userGrowthRate", "totalProviders", "pendingProviders",
+  "verifiedProviders", "totalBookings", "activeBookings", "bookingGrowthRate", "totalRevenue", "revenueGrowthRate",
+];
+const normalizeStats = (raw) => {
+  let d = raw;
+  for (let i = 0; i < 3 && d && typeof d === "object" && !Array.isArray(d) && d.totalUsers == null && d.data && typeof d.data === "object"; i += 1) d = d.data;
+  d = d?.dashboardStats || d || {};
+  return Object.fromEntries(STAT_KEYS.map((k) => [k, num(d[k])]));
+};
+
+const labelFromDate = (value) => {
+  const d = new Date(value);
+  return Number.isNaN(d.getTime()) ? null : d.toLocaleDateString("en-IN", { day: "2-digit", month: "short" });
+};
+const mapSeries = (raw) => toArray(raw).map((it, i) => ({
+  name: it.label || it.name || (it.date && labelFromDate(it.date)) || `#${i + 1}`,
+  value: num(it.value ?? it.amount ?? it.revenue ?? it.total ?? it.count),
 }));
-const GradientText = styled(Typography)({ background: 'linear-gradient(135deg, #6366f1 0%, #8b5cf6 100%)', WebkitBackgroundClip: 'text', WebkitTextFillColor: 'transparent', backgroundClip: 'text' });
 
-// FIX 1: No RAF leak - useMemo
-const AnimatedNumber = React.memo(({ value }) => {
-  const formatted = useMemo(() => new Intl.NumberFormat('en-IN').format(Math.round(value||0)), [value]);
-  return <>{formatted}</>;
+const colorByName = (() => {
+  const map = new Map();
+  return (name) => {
+    const key = name || "Unknown";
+    if (!map.has(key)) map.set(key, CHART_COLORS[map.size % CHART_COLORS.length]);
+    return map.get(key);
+  };
+})();
+const mapDistribution = (raw) => toArray(raw).map((i) => {
+  const name = i.label || i.name || "Unknown";
+  return { name, value: num(i.count ?? i.value), color: i.color || colorByName(name) };
 });
 
-const StatCard = React.memo(({ title, value, icon: Icon, trend, loading, prefix="", suffix="", color="primary", onClick, badge, subtitle }) => {
-  const mainColor = COLORS[color]||COLORS.primary;
+const mapBookings = (raw) => toArray(raw).map((b, i) => ({
+  key: b.id ?? b.bookingId ?? `row-${i}`,
+  id: b.id ?? b.bookingId ?? null,
+  customer: b.customerName || b.customer?.name || b.customer?.fullName || "Unknown",
+  service: b.serviceType || b.service?.name || b.service || "—",
+  amount: num(b.totalAmount ?? b.amount),
+  status: String(b.status || "PENDING").toUpperCase(),
+  createdAt: b.createdAt || b.bookingDate || b.timestamp || null,
+}));
+
+const mapTopProviders = (raw) => toArray(raw).map((p, i) => ({
+  key: p.id ?? p.providerId ?? `prov-${i}`,
+  id: p.id ?? p.providerId ?? null,
+  name: p.name || p.fullName || p.providerName || "Provider",
+  rating: num(p.rating ?? p.averageRating),
+  jobs: num(p.completedBookings ?? p.totalBookings ?? p.bookings ?? p.jobs),
+  revenue: num(p.revenue ?? p.earnings ?? p.totalEarnings),
+}));
+
+const mapActivities = (raw) => toArray(raw).map((a, i) => ({
+  key: a.id ?? `act-${i}`,
+  text: a.title || a.message || a.description || a.action || "Activity",
+  at: a.timestamp || a.createdAt || a.time || null,
+  type: String(a.type || a.severity || "info").toLowerCase(),
+}));
+
+const normAlert = (a) => ({
+  ...a,
+  _key: a.id ?? `${a.timestamp || ""}|${a.title || a.message || ""}`,
+  _color: { error: COLORS.danger, critical: COLORS.danger, warning: COLORS.warning, success: COLORS.success }[String(a.severity || a.type || "").toLowerCase()] || COLORS.info,
+});
+
+// Optional endpoints: if adminService does not implement them yet, the panel hides itself.
+const callOptional = (names, ...args) => {
+  const fn = names.map((n) => adminService?.[n]).find((f) => typeof f === "function");
+  if (!fn) return Promise.reject(Object.assign(new Error("not implemented"), { code: "NOT_IMPLEMENTED" }));
+  return fn.apply(adminService, args);
+};
+
+const PANELS = {
+  stats: { fetch: (s) => adminService.getDashboardStats(s), map: normalizeStats },
+  providers: { fetch: (s) => adminService.getProviderDistribution(s), map: mapDistribution },
+  revenue: { fetch: (s, p) => adminService.getRevenueTrend({ days: p.days }, s), map: mapSeries },
+  bookings: { fetch: (s) => adminService.getRecentBookings({ limit: 10 }, s), map: mapBookings },
+  topProviders: { fetch: (s) => callOptional(["getTopProviders"], { limit: 5 }, s), map: mapTopProviders },
+  demand: { fetch: (s) => callOptional(["getServiceDemand"], { days: 30 }, s), map: mapSeries },
+  activities: { fetch: (s) => callOptional(["getRecentActivities"], { limit: 10 }, s), map: mapActivities },
+};
+const EMPTY_DATA = {
+  stats: normalizeStats({}), providers: [], revenue: [], bookings: [], topProviders: [], demand: [], activities: [],
+};
+const INITIAL_STATUS = Object.fromEntries(ALL_PANELS.map((k) => [k, { state: "loading" }]));
+
+/* CSV export: UTF-8 BOM for Excel, quotes escaped, formula-injection guarded. */
+const csvCell = (v) => {
+  if (typeof v === "number") return String(v);
+  let s = v == null ? "" : String(v);
+  if (/^[=+\-@\t\r]/.test(s)) s = `'${s}`;
+  return `"${s.replace(/"/g, '""')}"`;
+};
+const downloadCsv = (filename, rows) => {
+  const body = rows.map((r) => r.map(csvCell).join(",")).join("\r\n");
+  const url = URL.createObjectURL(new Blob([`\uFEFF${body}`], { type: "text/csv;charset=utf-8" }));
+  const a = document.createElement("a");
+  a.href = url; a.download = filename;
+  document.body.appendChild(a); a.click(); a.remove();
+  setTimeout(() => URL.revokeObjectURL(url), 1000);
+};
+
+const loadPrefs = () => {
+  try { return JSON.parse(localStorage.getItem(PREF_KEY) || "{}") || {}; } catch { return {}; }
+};
+
+/* ============================== UI primitives ============================== */
+
+const GlassCard = styled(Paper)(({ theme }) => ({
+  background: "#fff", border: `1px solid ${COLORS.border}`, borderRadius: 16, padding: 20,
+  boxShadow: "0 2px 12px rgba(0,0,0,0.04)",
+  [theme.breakpoints.down("sm")]: { padding: 14, borderRadius: 12 },
+}));
+
+const GradientText = styled(Typography)({
+  background: "linear-gradient(135deg, #6366f1 0%, #8b5cf6 100%)", WebkitBackgroundClip: "text",
+  WebkitTextFillColor: "transparent", backgroundClip: "text",
+});
+
+const StatCard = React.memo(function StatCard({ title, value, format = "number", icon: Icon, trend, status, color = "primary", onClick, badge, subtitle }) {
+  const main = COLORS[color] || COLORS.primary;
+  const t = trend == null ? null : num(trend);
+  const state = status?.state || "loading";
+  const clickable = Boolean(onClick);
   return (
-    <motion.div initial={{opacity:0,y:10}} animate={{opacity:1,y:0}} whileHover={onClick?{y:-3}:{}} onClick={onClick} style={{cursor:onClick?'pointer':'default', height:'100%'}}>
-      <GlassCard>
-        <Stack direction="row" justifyContent="space-between" mb={1}>
-          <Box sx={{ p:1.2, borderRadius:2, bgcolor:alpha(mainColor,0.1), border:`1px solid ${alpha(mainColor,0.15)}` }}>{Icon&&<Icon size={18} color={mainColor}/>}</Box>
-          {trend!=null&&!loading&&<Chip icon={trend>=0?<FaArrowUp size={8}/>:<FaArrowDown size={8}/>} label={`${trend>=0?'+':''}${trend.toFixed(1)}%`} size="small" sx={{ height:22, fontSize:10, bgcolor:alpha(trend>=0?COLORS.success:COLORS.danger,0.1), color:trend>=0?COLORS.success:COLORS.danger }}/>}
-        </Stack>
-        <Typography sx={{ color:COLORS.text.muted, fontSize:12, fontWeight:500 }}>{title} {badge&&<Chip label={badge} size="small" sx={{ height:18, fontSize:9, ml:1 }}/>}</Typography>
-        {loading?<Skeleton width="60%" height={28}/>:<Typography variant="h5" sx={{ fontWeight:700 }}>{prefix}<AnimatedNumber value={value}/>{suffix} {subtitle&&<Typography component="span" variant="caption" color={COLORS.text.muted}>{subtitle}</Typography>}</Typography>}
-      </GlassCard>
-    </motion.div>
+    <GlassCard
+      component={clickable ? "button" : "div"}
+      type={clickable ? "button" : undefined}
+      onClick={onClick}
+      aria-label={clickable ? `${title}: open details` : undefined}
+      sx={{
+        width: "100%", height: "100%", textAlign: "left", font: "inherit", display: "block",
+        cursor: clickable ? "pointer" : "default", transition: "transform .2s, box-shadow .2s",
+        "&:hover": clickable ? { transform: "translateY(-2px)", boxShadow: "0 6px 20px rgba(0,0,0,0.08)" } : undefined,
+        "&:focus-visible": { outline: `2px solid ${main}`, outlineOffset: 2 },
+        "@media (prefers-reduced-motion: reduce)": { transition: "none", "&:hover": { transform: "none" } },
+      }}
+    >
+      <Stack direction="row" justifyContent="space-between" mb={1}>
+        <Box sx={{ p: 1.2, borderRadius: 2, bgcolor: alpha(main, 0.1), border: `1px solid ${alpha(main, 0.15)}` }}>{Icon && <Icon size={18} color={main} />}</Box>
+        {t != null && state === "ready" && (
+          <Chip
+            icon={t >= 0 ? <FaArrowUp size={8} /> : <FaArrowDown size={8} />}
+            label={`${t >= 0 ? "+" : ""}${t.toFixed(1)}%`} size="small"
+            sx={{ height: 22, fontSize: 10, bgcolor: alpha(t >= 0 ? COLORS.success : COLORS.danger, 0.1), color: t >= 0 ? COLORS.success : COLORS.danger }}
+          />
+        )}
+      </Stack>
+      <Typography sx={{ color: COLORS.muted, fontSize: 12, fontWeight: 500 }}>
+        {title} {badge && <Chip label={badge} size="small" sx={{ height: 18, fontSize: 9, ml: 1 }} />}
+      </Typography>
+      {state === "loading" ? <Skeleton width="60%" height={32} /> : state === "error" ? (
+        <Typography variant="h5" sx={{ fontWeight: 700, color: COLORS.muted }} title="Could not load">—</Typography>
+      ) : (
+        <Typography variant="h5" sx={{ fontWeight: 700 }}>
+          {format === "currency" ? fmtINR(value) : fmtNum(value)}{" "}
+          {subtitle && <Typography component="span" variant="caption" color={COLORS.muted}>{subtitle}</Typography>}
+        </Typography>
+      )}
+    </GlassCard>
   );
 });
 
-// FIX 2: useId for gradient - no duplicate id
-const MetricChart = React.memo(({ data, type="area", height=280, loading, color=COLORS.primary }) => {
-  const gid = useId().replace(/:/g,'');
-  if(loading) return <Box sx={{display:'flex',justifyContent:'center',alignItems:'center',height}}><CircularProgress size={24}/></Box>;
-  if(!data?.length) return <Box sx={{display:'flex',justifyContent:'center',alignItems:'center',height}}><Typography variant="caption" color={COLORS.text.muted}>No data</Typography></Box>;
+const Panel = React.memo(function Panel({ title, subtitle, actions, status, onRetry, minHeight = 220, children }) {
+  const state = status?.state || "loading";
+  return (
+    <GlassCard component="section" aria-label={title} sx={{ height: "100%" }}>
+      <Stack direction="row" justifyContent="space-between" alignItems="flex-start" mb={2} gap={1}>
+        <Box>
+          <Typography variant="subtitle2" fontWeight={700}>{title}</Typography>
+          {subtitle && <Typography variant="caption" color={COLORS.muted}>{subtitle}</Typography>}
+        </Box>
+        {actions}
+      </Stack>
+      {state === "loading" ? <Skeleton variant="rounded" height={minHeight} /> : state === "error" ? (
+        <Box sx={{ minHeight, display: "flex", flexDirection: "column", alignItems: "center", justifyContent: "center", gap: 1, textAlign: "center" }}>
+          <Typography variant="body2" color={COLORS.secondary}>
+            {status?.error?.httpStatus === 403 ? "You do not have permission to view this." : "This section could not be loaded."}
+          </Typography>
+          <Button size="small" variant="outlined" onClick={onRetry} sx={{ textTransform: "none" }}>Try again</Button>
+        </Box>
+      ) : children}
+      {status?.stale && <Typography variant="caption" sx={{ color: COLORS.warning, display: "block", mt: 1 }}>Showing last loaded data. The latest refresh failed.</Typography>}
+    </GlassCard>
+  );
+});
+
+const EmptyState = ({ text, minHeight = 200 }) => (
+  <Box sx={{ minHeight, display: "flex", alignItems: "center", justifyContent: "center" }}>
+    <Typography variant="caption" color={COLORS.muted}>{text}</Typography>
+  </Box>
+);
+
+const MetricChart = React.memo(function MetricChart({ data, type = "area", height = 260, color = COLORS.primary, currency = false }) {
+  const gid = useId().replace(/:/g, "");
+  if (!data?.length) return <EmptyState text="No data for this period" minHeight={height} />;
+  const fmt = (v) => (currency ? fmtINR(v) : fmtNum(v));
   return (
     <ResponsiveContainer width="100%" height={height}>
-      {type==="area"?(
-        <AreaChart data={data}><defs><linearGradient id={`g-${gid}`} x1="0" y1="0" x2="0" y2="1"><stop offset="5%" stopColor={color} stopOpacity={0.25}/><stop offset="95%" stopColor={color} stopOpacity={0}/></linearGradient></defs>
-          <CartesianGrid strokeDasharray="3 3" stroke={COLORS.borderLight} vertical={false}/><XAxis dataKey="name" tick={{fontSize:11}}/><YAxis tick={{fontSize:11}}/><RechartsTooltip/>
-          <Area type="monotone" dataKey="value" stroke={color} strokeWidth={2} fill={`url(#g-${gid})`}/></AreaChart>
-      ):(
-        <BarChart data={data}><CartesianGrid strokeDasharray="3 3" vertical={false}/><XAxis dataKey="name" tick={{fontSize:10}}/><YAxis tick={{fontSize:10}}/><RechartsTooltip/><Bar dataKey="value" fill={color} radius={[6,6,0,0]}/></BarChart>
+      {type === "area" ? (
+        <AreaChart data={data} margin={{ left: 0, right: 8, top: 8 }}>
+          <defs>
+            <linearGradient id={`g-${gid}`} x1="0" y1="0" x2="0" y2="1">
+              <stop offset="5%" stopColor={color} stopOpacity={0.25} /><stop offset="95%" stopColor={color} stopOpacity={0} />
+            </linearGradient>
+          </defs>
+          <CartesianGrid strokeDasharray="3 3" stroke={COLORS.borderLight} vertical={false} />
+          <XAxis dataKey="name" tick={{ fontSize: 11 }} interval="preserveStartEnd" />
+          <YAxis tick={{ fontSize: 11 }} tickFormatter={fmtCompact} width={44} />
+          <RechartsTooltip formatter={(v) => [fmt(v), "Value"]} />
+          <Area type="monotone" dataKey="value" stroke={color} strokeWidth={2} fill={`url(#g-${gid})`} />
+        </AreaChart>
+      ) : (
+        <BarChart data={data} margin={{ left: 0, right: 8, top: 8 }}>
+          <CartesianGrid strokeDasharray="3 3" stroke={COLORS.borderLight} vertical={false} />
+          <XAxis dataKey="name" tick={{ fontSize: 10 }} interval="preserveStartEnd" />
+          <YAxis tick={{ fontSize: 10 }} tickFormatter={fmtCompact} width={44} />
+          <RechartsTooltip formatter={(v) => [fmt(v), "Value"]} />
+          <Bar dataKey="value" fill={color} radius={[6, 6, 0, 0]} />
+        </BarChart>
       )}
     </ResponsiveContainer>
   );
 });
 
+/* ============================== Page ============================== */
+
 export default function AdminDashboard() {
-  const { loading: authLoading, isAuthenticated, user } = useAuth();
+  const { loading: authLoading, isAuthenticated, user, logout } = useAuth();
   const navigate = useNavigate();
-  const isMobile = useMediaQuery(useTheme().breakpoints.down('sm'));
-  const [searchQuery, setSearchQuery] = useState('');
-  const [exportDialog, setExportDialog] = useState(false);
-  const [settingsDrawer, setSettingsDrawer] = useState(false);
-  const [chartType, setChartType] = useState('area');
-  const [autoRefresh, setAutoRefresh] = useState(true);
-  const [refreshInterval] = useState(30);
-  const [refreshing, setRefreshing] = useState(false);
-  const [apiError, setApiError] = useState(null);
-  const [lastUpdateTime, setLastUpdateTime] = useState(new Date());
-  const [roleCheckDone, setRoleCheckDone] = useState(false);
-  const [stats, setStats] = useState(null);
-  const [providerData, setProviderData] = useState([]);
-  const [revenueTrend, setRevenueTrend] = useState([]);
-  const [recentBookings, setRecentBookings] = useState([]);
-  const [alerts, setAlerts] = useState([]);
-  const [readAlertIds, setReadAlertIds] = useState(()=>new Set());
-  const [loading, setLoading] = useState({ all: true, stats:true, provider:true, revenue:true, bookings:true });
+  const routeLocation = useLocation();
+  const theme = useTheme();
+  const isMobile = useMediaQuery(theme.breakpoints.down("sm"));
+
+  const prefs = useMemo(loadPrefs, []);
+  const [chartType, setChartType] = useState(prefs.chartType === "bar" ? "bar" : "area");
+  const [autoRefresh, setAutoRefresh] = useState(prefs.autoRefresh !== false);
+  const [refreshSeconds, setRefreshSeconds] = useState(INTERVAL_OPTIONS.includes(prefs.refreshSeconds) ? prefs.refreshSeconds : 30);
+  const [range, setRange] = useState(REVENUE_RANGES.includes(prefs.range) ? prefs.range : 7);
+
+  const [searchQuery, setSearchQuery] = useState("");
+  const [exportOpen, setExportOpen] = useState(false);
+  const [exportChoices, setExportChoices] = useState({ summary: true, bookings: true, revenue: false });
+  const [settingsOpen, setSettingsOpen] = useState(false);
   const [anchorNotif, setAnchorNotif] = useState(null);
   const [anchorUser, setAnchorUser] = useState(null);
+  const [refreshing, setRefreshing] = useState(false);
+  const [lastUpdateTime, setLastUpdateTime] = useState(() => new Date());
+  const [forbidden, setForbidden] = useState(false);
 
-  const { connected, alerts: socketAlerts, lastUpdated, markAlertAsRead, markAllAlertsAsRead, reconnect } = useAdminDashboardSocket({
-    enableRealTime:true, autoConnect:true,
-    onStatsUpdate: useCallback((d)=>{
-      const s = d?.data || d?.dashboardStats || d;
-      if(s?.totalUsers!=null) setStats(s);
-      if(d?.revenueTrend) setRevenueTrend(d.revenueTrend);
-      setLastUpdateTime(new Date());
-    }, []),
-    onAlert: useCallback((a)=>{ setAlerts(p=>[a,...p].slice(0,50)); }, [])
-  });
+  const [data, setData] = useState(EMPTY_DATA);
+  const [status, setStatus] = useState(INITIAL_STATUS);
+  const [alerts, setAlerts] = useState([]);
+  const [readKeys, setReadKeys] = useState(() => new Set());
 
-  const abortRef = useRef(null);
-  const timerRef = useRef(null);
-  const fetchingRef = useRef(false);
+  const mountedRef = useRef(true);
+  const controllersRef = useRef(new Set());
+  const genRef = useRef({});
+  const inflightRef = useRef(0);
+  const paramsRef = useRef({ days: range });
+  const prevRangeRef = useRef(range);
+  const authRedirectRef = useRef(false);
+  const deniedRef = useRef(false);
 
-  useEffect(()=>{
-    if(authLoading) return;
-    if(!isAuthenticated){ navigate('/login', { state:{ from:'/admin/dashboard' } }); return; }
-    const role = user?.role?.toUpperCase()||'';
-    if(!['ADMIN','SUPER_ADMIN'].includes(role)){ toast.error(`Access Denied: ${role}`); navigate('/'); return; }
-    setRoleCheckDone(true);
-  }, [authLoading][isAuthenticated][user][navigate]);
+  const role = normalizeRole(user?.role);
+  const allowed = !authLoading && isAuthenticated && ADMIN_ROLES.has(role);
 
-  // FIX 3: AbortController + Single render + Safe unwrap
-  const fetchAll = useCallback(async (showLoad=true)=>{
-    if(fetchingRef.current) return;
-    fetchingRef.current=true;
-    if(abortRef.current) abortRef.current.abort();
-    abortRef.current = new AbortController();
-    const signal = abortRef.current.signal;
+  /* Persist preferences. */
+  useEffect(() => {
+    try { localStorage.setItem(PREF_KEY, JSON.stringify({ chartType, autoRefresh, refreshSeconds, range })); } catch { /* ignore */ }
+  }, [chartType, autoRefresh, refreshSeconds, range]);
 
-    if(showLoad) setLoading({ all: true, stats:true, provider:true, revenue:true, bookings:true });
-    setApiError(null);
-
-    try {
-      const results = await Promise.allSettled([
-        adminService.getDashboardStats(signal),
-        adminService.getProviderDistribution(signal),
-        adminService.getRevenueTrend({ days: 7 }, signal),
-        adminService.getRecentBookings({ limit: 10 }, signal),
-      ]);
-
-      if(signal.aborted) return;
-
-      const [statsRes][providerRes][revenueRes][bookingsRes] = results;
-
-      if(statsRes.status==='fulfilled' && statsRes.value){
-        const s = statsRes.value?.data || statsRes.value;
-        setStats(s);
-      }
-      if(providerRes.status==='fulfilled'){
-        const raw = providerRes.value?.data || providerRes.value || [];
-        const mapped = Array.isArray(raw)? raw.map(i=>({
-          name: i.label || i.name || 'Unknown',
-          value: i.count?? i.value?? 0,
-          color: i.color || getStableColor(i.label||i.name)
-        })) : [];
-        setProviderData(mapped);
-      }
-      if(revenueRes.status==='fulfilled'){
-        const raw = revenueRes.value?.data || revenueRes.value || [];
-        const mapped = Array.isArray(raw)? raw.map((it,i)=>({
-          name: it.label || it.name || `D${i+1}`,
-          value: it.value?? 0
-        })) : [];
-        setRevenueTrend(mapped.length? mapped : Array.from({length:7},(_,i)=>({ name: subDays(new Date(),6-i).toLocaleDateString('en',{weekday:'short'}), value:0 })));
-      }
-      if(bookingsRes.status==='fulfilled'){
-        const raw = bookingsRes.value?.data || bookingsRes.value || [];
-        setRecentBookings(Array.isArray(raw)? raw : []);
-      }
-
-      setLastUpdateTime(new Date());
-      if(results.every(r=>r.status==='rejected')) setApiError('Failed to load. Check backend logs.');
-
-    } catch(e){
-      if(e.name!=='AbortError') setApiError(e.message);
-    } finally {
-      if(!signal.aborted){
-        setLoading({ all:false, stats:false, provider:false, revenue:false, bookings:false });
-        fetchingRef.current=false;
-      }
+  /* Auth / role gate. */
+  useEffect(() => {
+    if (authLoading) return;
+    if (!isAuthenticated) {
+      navigate("/login", { replace: true, state: { from: routeLocation } });
+      return;
     }
+    if (!ADMIN_ROLES.has(role) && !deniedRef.current) {
+      deniedRef.current = true;
+      toast.error("You do not have access to the admin area.");
+      navigate("/", { replace: true });
+    }
+  }, [authLoading, isAuthenticated, role, navigate, routeLocation]);
+
+  useEffect(() => {
+    mountedRef.current = true;
+    const controllers = controllersRef.current;
+    return () => {
+      mountedRef.current = false;
+      controllers.forEach((c) => c.abort());
+      controllers.clear();
+    };
   }, []);
 
-  useEffect(()=>{ if(roleCheckDone) fetchAll(true); return()=> abortRef.current?.abort(); }, [roleCheckDone, fetchAll]);
+  const handleUnauthorized = useCallback(async () => {
+    if (authRedirectRef.current) return;
+    authRedirectRef.current = true;
+    toast.info("Your session has expired. Please sign in again.");
+    try { await logout?.(); } catch { /* sign out locally regardless */ }
+    navigate("/login", { replace: true, state: { from: routeLocation } });
+  }, [logout, navigate, routeLocation]);
 
-  useEffect(()=>{
-    if(timerRef.current) clearInterval(timerRef.current);
-    if(roleCheckDone &&!connected && autoRefresh){
-      timerRef.current=setInterval(()=>{ if(!fetchingRef.current) fetchAll(false); }, refreshInterval*1000);
+  /* Load one or more panels. Latest request per panel wins; aborted requests never touch state. */
+  const loadPanels = useCallback(async (keys) => {
+    const controller = new AbortController();
+    controllersRef.current.add(controller);
+    inflightRef.current += 1;
+    const gens = {};
+    keys.forEach((k) => { genRef.current[k] = (genRef.current[k] || 0) + 1; gens[k] = genRef.current[k]; });
+    const stale = () => controller.signal.aborted || !mountedRef.current;
+
+    const run = async (key) => {
+      const cfg = PANELS[key];
+      try {
+        const raw = await cfg.fetch(controller.signal, paramsRef.current);
+        if (stale() || genRef.current[key] !== gens[key]) return { key, skipped: true };
+        setData((p) => ({ ...p, [key]: cfg.map(raw) }));
+        setStatus((p) => ({ ...p, [key]: { state: "ready" } }));
+        return { key, ok: true };
+      } catch (err) {
+        if (isCanceled(err) || stale() || genRef.current[key] !== gens[key]) return { key, skipped: true };
+        if (err?.code === "NOT_IMPLEMENTED") {
+          setStatus((p) => ({ ...p, [key]: { state: "unavailable" } }));
+          return { key, skipped: true };
+        }
+        const httpStatus = err?.response?.status || 0;
+        const error = { httpStatus, message: err?.response?.data?.message || err?.message };
+        console.error(`[AdminDashboard] ${key} failed`, httpStatus || error.message);
+        setStatus((p) => {
+          const hadData = p[key]?.state === "ready";
+          return { ...p, [key]: { state: hadData ? "ready" : "error", stale: hadData, error } };
+        });
+        return { key, ok: false, httpStatus };
+      }
+    };
+
+    const results = await Promise.all(keys.map(run));
+    controllersRef.current.delete(controller);
+    inflightRef.current = Math.max(0, inflightRef.current - 1);
+
+    if (mountedRef.current) {
+      if (results.some((r) => r.ok)) setLastUpdateTime(new Date());
+      if (results.some((r) => r.httpStatus === 401)) handleUnauthorized();
+      else if (results.some((r) => r.httpStatus === 403)) setForbidden(true);
+      else if (results.some((r) => r.ok)) setForbidden(false);
     }
-    return()=>{ if(timerRef.current) clearInterval(timerRef.current); };
-  }, [connected, autoRefresh, refreshInterval, roleCheckDone, fetchAll]);
+    return results;
+  }, [handleUnauthorized]);
 
-  useEffect(()=>{
-    if(!socketAlerts?.length) return;
-    setAlerts(prev=>{
-      const ids=new Set(prev.map(a=>a.id).filter(Boolean));
-      const fresh=socketAlerts.filter(a=>!a.id||!ids.has(a.id));
-      return fresh.length?[...fresh,...prev].slice(0,50):prev;
+  /* Initial load. */
+  useEffect(() => { if (allowed) loadPanels(ALL_PANELS); }, [allowed, loadPanels]);
+
+  /* Revenue range change reloads only that panel. */
+  useEffect(() => {
+    if (!allowed || prevRangeRef.current === range) return;
+    prevRangeRef.current = range;
+    paramsRef.current = { days: range };
+    setData((p) => ({ ...p, revenue: [] }));
+    setStatus((p) => ({ ...p, revenue: { state: "loading" } }));
+    loadPanels(["revenue"]);
+  }, [range, allowed, loadPanels]);
+
+  /* Realtime socket. */
+  const handleStats = useCallback((d) => {
+    const s = d?.data || d?.dashboardStats || d;
+    if (s?.totalUsers != null) {
+      setData((p) => ({ ...p, stats: normalizeStats(s) }));
+      setStatus((p) => ({ ...p, stats: { state: "ready" } }));
+    }
+    if (d?.revenueTrend && paramsRef.current.days === 7) {
+      setData((p) => ({ ...p, revenue: mapSeries(d.revenueTrend) }));
+      setStatus((p) => ({ ...p, revenue: { state: "ready" } }));
+    }
+    setLastUpdateTime(new Date());
+  }, []);
+  const handleAlert = useCallback((a) => {
+    const n = normAlert(a);
+    setAlerts((p) => (p.some((x) => x._key === n._key) ? p : [n, ...p].slice(0, 50)));
+  }, []);
+
+  const { connected, alerts: socketAlerts, lastUpdated, markAlertAsRead, markAllAlertsAsRead, reconnect } = useAdminDashboardSocket({
+    enableRealTime: true, autoConnect: allowed, onStatsUpdate: handleStats, onAlert: handleAlert,
+  });
+
+  useEffect(() => {
+    if (!socketAlerts?.length) return;
+    setAlerts((prev) => {
+      const seen = new Set(prev.map((a) => a._key));
+      const fresh = socketAlerts.map(normAlert).filter((a) => !seen.has(a._key));
+      return fresh.length ? [...fresh, ...prev].slice(0, 50) : prev;
     });
   }, [socketAlerts]);
 
-  const handleRefresh = useCallback(async()=>{
-    if(fetchingRef.current) return; setRefreshing(true);
-    try{ if(connected) reconnect?.(); await fetchAll(true); toast.success('Refreshed'); }
-    catch{ toast.error('Refresh failed'); } finally{ setRefreshing(false); }
-  }, [fetchAll, connected, reconnect]);
-
-  const safeStats = useMemo(()=>{
-    const d=stats||{};
-    return {
-      totalUsers:d.totalUsers||0, activeUsers:d.activeUsers||0, newUsersToday:d.newUsersToday||0, userGrowthRate:d.userGrowthRate||0,
-      totalProviders:d.totalProviders||0, pendingProviders:d.pendingProviders||0, verifiedProviders:d.verifiedProviders||0,
-      totalBookings:d.totalBookings||0, activeBookings:d.activeBookings||0, bookingGrowthRate:d.bookingGrowthRate||0,
-      totalRevenue:d.totalRevenue||0, revenueGrowthRate:d.revenueGrowthRate||0
+  /* Polling fallback: only when the socket is down, tab visible, nothing in flight. */
+  useEffect(() => {
+    if (!allowed || connected || !autoRefresh) return undefined;
+    const tick = () => {
+      if (document.visibilityState === "visible" && inflightRef.current === 0) loadPanels(ALL_PANELS);
     };
-  }, [stats]);
+    const id = setInterval(tick, refreshSeconds * 1000);
+    const onVisible = () => {
+      if (document.visibilityState === "visible" && Date.now() - lastUpdateTime.getTime() > refreshSeconds * 1000) tick();
+    };
+    document.addEventListener("visibilitychange", onVisible);
+    return () => { clearInterval(id); document.removeEventListener("visibilitychange", onVisible); };
+  }, [allowed, connected, autoRefresh, refreshSeconds, loadPanels, lastUpdateTime]);
 
-  const filteredBookings = useMemo(()=>{
-    const q=searchQuery.trim().toLowerCase();
-    if(!q) return recentBookings;
-    return recentBookings.filter(b=>[b.customerName,b.serviceType,String(b.id),String(b.bookingId)].some(v=>String(v||'').toLowerCase().includes(q)));
-  }, [recentBookings, searchQuery]);
+  const handleRefresh = useCallback(async () => {
+    if (refreshing) return;
+    setRefreshing(true);
+    if (!connected) reconnect?.();
+    const results = await loadPanels(ALL_PANELS);
+    if (mountedRef.current) {
+      setRefreshing(false);
+      const failed = results.filter((r) => r.ok === false).length;
+      if (failed === 0) toast.success("Dashboard refreshed");
+      else toast.warn(`${failed} section${failed > 1 ? "s" : ""} could not be refreshed`);
+    }
+  }, [refreshing, connected, reconnect, loadPanels]);
 
-  const unreadCount = useMemo(()=>alerts.filter(a=>!a.id||!readAlertIds.has(a.id)).length, [alerts, readAlertIds]);
+  const handleSignOut = useCallback(async () => {
+    setAnchorUser(null);
+    try { await logout?.(); } catch { /* the server may reject an expired token; still sign out locally */ }
+    navigate("/login", { replace: true });
+  }, [logout, navigate]);
 
-  if(authLoading||!roleCheckDone) return <Box sx={{display:'flex',justifyContent:'center',alignItems:'center',height:'100vh'}}><LoadingSpinner size="large" text="Loading admin..." /></Box>;
+  /* Derived. */
+  const stats = data.stats;
+  const filteredBookings = useMemo(() => {
+    const q = searchQuery.trim().toLowerCase();
+    if (!q) return data.bookings;
+    return data.bookings.filter((b) => [b.id, b.customer, b.service, b.status].some((v) => v != null && String(v).toLowerCase().includes(q)));
+  }, [data.bookings, searchQuery]);
+  const pieData = useMemo(() => data.providers.filter((d) => d.value > 0), [data.providers]);
+  const pieTotal = useMemo(() => pieData.reduce((s, d) => s + d.value, 0), [pieData]);
+  const unreadCount = useMemo(() => alerts.filter((a) => !readKeys.has(a._key)).length, [alerts, readKeys]);
+  const updatedLabel = safeDistance(lastUpdated) || safeDistance(lastUpdateTime) || "just now";
+
+  const retry = useCallback((key) => {
+    setStatus((p) => ({ ...p, [key]: { state: "loading" } }));
+    loadPanels([key]);
+  }, [loadPanels]);
+
+  /* Export. */
+  const handleExport = useCallback(() => {
+    const stamp = new Date().toISOString().slice(0, 10);
+    let files = 0;
+    if (exportChoices.summary) {
+      downloadCsv(`quickks-summary-${stamp}.csv`, [["Metric", "Value"], ...STAT_KEYS.map((k) => [k, stats[k]])]);
+      files += 1;
+    }
+    if (exportChoices.bookings) {
+      downloadCsv(`quickks-bookings-${stamp}.csv`, [
+        ["ID", "Customer", "Service", "Amount (INR)", "Status", "Created"],
+        ...data.bookings.map((b) => [b.id ?? "", b.customer, b.service, b.amount, b.status, b.createdAt ?? ""]),
+      ]);
+      files += 1;
+    }
+    if (exportChoices.revenue) {
+      downloadCsv(`quickks-revenue-${range}d-${stamp}.csv`, [["Period", "Revenue (INR)"], ...data.revenue.map((r) => [r.name, r.value])]);
+      files += 1;
+    }
+    if (files) toast.success(`Exported ${files} file${files > 1 ? "s" : ""}`);
+    setExportOpen(false);
+  }, [exportChoices, stats, data.bookings, data.revenue, range]);
+
+  if (authLoading || !allowed) {
+    return <Box sx={{ display: "flex", justifyContent: "center", alignItems: "center", height: "100vh" }}><LoadingSpinner size="large" text="Loading admin..." /></Box>;
+  }
+
+  const showTop = status.topProviders.state !== "unavailable";
+  const showDemand = status.demand.state !== "unavailable";
+  const showActivity = status.activities.state !== "unavailable";
+  const statsStatus = status.stats;
 
   return (
     <ErrorBoundary>
-      <LocalizationProvider dateAdapter={AdapterDateFns}>
-        <Box sx={{ minHeight:"100vh", bgcolor:COLORS.bg.main }}>
-          {refreshing&&<LinearProgress sx={{ position:'fixed', top:0, left:0, right:0, zIndex:9999, height:3 }} />}
-          <Container maxWidth="xl" sx={{ py:2 }}>
-            <GlassCard sx={{ mb:2 }}>
-              <Stack direction="row" justifyContent="space-between" alignItems="center" flexWrap="wrap" gap={1}>
-                <Stack direction="row" spacing={1.5} alignItems="center"><Avatar sx={{ background:`linear-gradient(135deg, #6366f1, #8b5cf6)`, width:40, height:40 }}><FaBolt size={16} color="white"/></Avatar><Box><Typography variant="h6" sx={{ fontWeight:800, fontSize:'1.1rem' }}><GradientText>Quickks Admin</GradientText></Typography><Typography variant="caption" color={COLORS.text.muted}>{lastUpdated?`Updated ${formatDistanceToNow(new Date(lastUpdated),{addSuffix:true})}`:`Updated ${formatDistanceToNow(lastUpdateTime,{addSuffix:true})}`} • {connected?'LIVE':'POLLING'}</Typography></Box></Stack>
-                <Stack direction="row" spacing={0.5} alignItems="center">
-                  <TextField size="small" placeholder="Search bookings..." value={searchQuery} onChange={e=>setSearchQuery(e.target.value)} sx={{ minWidth:isMobile?110:180 }} InputProps={{ startAdornment:<InputAdornment position="start"><FaSearch size={12}/></InputAdornment> }}/>
-                  <Tooltip title="Refresh"><IconButton size="small" onClick={handleRefresh}><FaSync size={14}/></IconButton></Tooltip>
-                  <IconButton size="small" onClick={e=>setAnchorNotif(e.currentTarget)}><Badge badgeContent={unreadCount} color="error"><FaBell size={14}/></Badge></IconButton>
-                  <IconButton size="small" onClick={()=>setSettingsDrawer(true)}><FaCog size={14}/></IconButton>
-                  <IconButton size="small" onClick={()=>setExportDialog(true)}><FaFileExport size={14}/></IconButton>
-                  <Avatar sx={{ width:28, height:28, bgcolor:COLORS.primary, fontSize:12, fontWeight:700, cursor:'pointer' }} onClick={e=>setAnchorUser(e.currentTarget)}>{user?.fullName?.[0]||'A'}</Avatar>
-                </Stack>
+      <Box sx={{ minHeight: "100vh", bgcolor: COLORS.bg }}>
+        {refreshing && <LinearProgress sx={{ position: "fixed", top: 0, left: 0, right: 0, zIndex: 9999, height: 3 }} />}
+        <Container maxWidth="xl" sx={{ py: 2 }}>
+          {/* Header */}
+          <GlassCard component="header" sx={{ mb: 2 }}>
+            <Stack direction="row" justifyContent="space-between" alignItems="center" flexWrap="wrap" gap={1}>
+              <Stack direction="row" spacing={1.5} alignItems="center">
+                <Avatar sx={{ background: "linear-gradient(135deg, #6366f1, #8b5cf6)", width: 40, height: 40 }}><FaBolt size={16} color="white" /></Avatar>
+                <Box>
+                  <Typography component="h1" variant="h6" sx={{ fontWeight: 800, fontSize: "1.1rem" }}><GradientText component="span">Quickks Admin</GradientText></Typography>
+                  <Typography variant="caption" color={COLORS.muted}>Updated {updatedLabel} • {connected ? "LIVE" : "POLLING"}</Typography>
+                </Box>
               </Stack>
-            </GlassCard>
+              <Stack direction="row" spacing={0.5} alignItems="center">
+                <TextField size="small" placeholder="Search bookings..." value={searchQuery} onChange={(e) => setSearchQuery(e.target.value)}
+                  inputProps={{ "aria-label": "Search recent bookings" }} sx={{ minWidth: isMobile ? 110 : 200 }}
+                  InputProps={{ startAdornment: <InputAdornment position="start"><FaSearch size={12} /></InputAdornment> }} />
+                <Tooltip title="Refresh"><span><IconButton size="small" onClick={handleRefresh} disabled={refreshing} aria-label="Refresh dashboard"><FaSync size={14} /></IconButton></span></Tooltip>
+                <Tooltip title="Notifications"><IconButton size="small" onClick={(e) => setAnchorNotif(e.currentTarget)} aria-label={`Notifications, ${unreadCount} unread`}><Badge badgeContent={unreadCount} color="error"><FaBell size={14} /></Badge></IconButton></Tooltip>
+                <Tooltip title="Settings"><IconButton size="small" onClick={() => setSettingsOpen(true)} aria-label="Open settings"><FaCog size={14} /></IconButton></Tooltip>
+                <Tooltip title="Export"><IconButton size="small" onClick={() => setExportOpen(true)} aria-label="Export data"><FaFileExport size={14} /></IconButton></Tooltip>
+                <Avatar component="button" type="button" aria-label="Account menu" onClick={(e) => setAnchorUser(e.currentTarget)}
+                  sx={{ width: 30, height: 30, bgcolor: COLORS.primary, fontSize: 12, fontWeight: 700, cursor: "pointer", border: "none" }}>
+                  {String(user?.fullName || user?.name || user?.firstName || user?.email || "A")[0].toUpperCase()}
+                </Avatar>
+              </Stack>
+            </Stack>
+          </GlassCard>
 
-            <Paper sx={{ p:1.2, mb:2, bgcolor:alpha(connected?COLORS.success:COLORS.warning,0.06), borderRadius:2, border:`1px solid ${alpha(connected?COLORS.success:COLORS.warning,0.12)}` }}>
-              <Stack direction="row" justifyContent="space-between"><Typography variant="caption" color={COLORS.text.secondary}>{connected?'✅ Realtime active':`🔄 Auto-refresh ${refreshInterval}s`}</Typography><Chip label={connected?'LIVE':'POLLING'} size="small" sx={{ height:20, fontSize:9, fontWeight:700 }}/></Stack>
-            </Paper>
+          {/* Connection banner */}
+          <Paper role="status" sx={{ p: 1.2, mb: 2, bgcolor: alpha(connected ? COLORS.success : COLORS.warning, 0.06), borderRadius: 2, border: `1px solid ${alpha(connected ? COLORS.success : COLORS.warning, 0.12)}`, boxShadow: "none" }}>
+            <Stack direction="row" justifyContent="space-between" alignItems="center" gap={1}>
+              <Typography variant="caption" color={COLORS.secondary}>
+                {connected ? "Realtime updates are active." : autoRefresh ? `Realtime is offline. Refreshing every ${refreshSeconds}s.` : "Realtime is offline and auto-refresh is off."}
+              </Typography>
+              <Stack direction="row" spacing={1} alignItems="center">
+                {!connected && <Button size="small" onClick={() => reconnect?.()} sx={{ textTransform: "none", fontSize: 11 }}>Reconnect</Button>}
+                <Chip label={connected ? "LIVE" : "POLLING"} size="small" sx={{ height: 20, fontSize: 9, fontWeight: 700 }} />
+              </Stack>
+            </Stack>
+          </Paper>
 
-            {apiError&&<Alert severity="error" sx={{ mb:2, borderRadius:2 }} action={<Button size="small" onClick={()=>fetchAll(true)}>Retry</Button>}>{apiError}</Alert>}
+          {forbidden && (
+            <Alert severity="error" sx={{ mb: 2, borderRadius: 2 }} action={<Button size="small" onClick={handleSignOut}>Sign out</Button>}>
+              The server refused admin access (403). Sign in again, or ask a super admin to confirm that your account has the admin role.
+            </Alert>
+          )}
+          {stats.pendingProviders > 0 && statsStatus.state === "ready" && (
+            <Alert severity="info" sx={{ mb: 2, borderRadius: 2 }} action={<Button size="small" onClick={() => navigate("/admin/providers")}>Review</Button>}>
+              {stats.pendingProviders} provider{stats.pendingProviders > 1 ? "s are" : " is"} waiting for approval.
+            </Alert>
+          )}
 
-            <Grid container spacing={2} sx={{ mb:2 }}>
-              <Grid size={{xs:12, sm:6, md:3}}><StatCard title="Total Users" value={safeStats.totalUsers} icon={FaUsers} trend={safeStats.userGrowthRate} loading={loading.stats} color="primary" onClick={()=>navigate('/admin/users')} badge={safeStats.newUsersToday?`+${safeStats.newUsersToday}`:null} subtitle={`${safeStats.activeUsers} active`}/></Grid>
-              <Grid size={{xs:12, sm:6, md:3}}><StatCard title="Providers" value={safeStats.totalProviders} icon={FaShieldAlt} loading={loading.provider} color="success" onClick={()=>navigate('/admin/providers')} badge={safeStats.pendingProviders?`${safeStats.pendingProviders} pending`:null}/></Grid>
-              <Grid size={{xs:12, sm:6, md:3}}><StatCard title="Bookings" value={safeStats.totalBookings} icon={FaClipboardList} trend={safeStats.bookingGrowthRate} loading={loading.bookings} color="warning" onClick={()=>navigate('/admin/bookings')} badge={safeStats.activeBookings?`${safeStats.activeBookings} active`:null}/></Grid>
-              <Grid size={{xs:12, sm:6, md:3}}><StatCard title="Revenue" value={safeStats.totalRevenue} prefix="₹" icon={FaRupeeSign} trend={safeStats.revenueGrowthRate} loading={loading.revenue} color="info"/></Grid>
+          {/* KPIs */}
+          <Grid container spacing={2} sx={{ mb: 2 }}>
+            <Grid size={{ xs: 12, sm: 6, md: 3 }}><StatCard title="Total users" value={stats.totalUsers} icon={FaUsers} trend={stats.userGrowthRate} status={statsStatus} color="primary" onClick={() => navigate("/admin/users")} badge={stats.newUsersToday ? `+${stats.newUsersToday} today` : null} subtitle={`${fmtNum(stats.activeUsers)} active`} /></Grid>
+            <Grid size={{ xs: 12, sm: 6, md: 3 }}><StatCard title="Providers" value={stats.totalProviders} icon={FaShieldAlt} status={statsStatus} color="success" onClick={() => navigate("/admin/providers")} badge={stats.pendingProviders ? `${stats.pendingProviders} pending` : null} subtitle={`${fmtNum(stats.verifiedProviders)} verified`} /></Grid>
+            <Grid size={{ xs: 12, sm: 6, md: 3 }}><StatCard title="Bookings" value={stats.totalBookings} icon={FaClipboardList} trend={stats.bookingGrowthRate} status={statsStatus} color="warning" onClick={() => navigate("/admin/bookings")} badge={stats.activeBookings ? `${stats.activeBookings} active` : null} /></Grid>
+            <Grid size={{ xs: 12, sm: 6, md: 3 }}><StatCard title="Revenue" value={stats.totalRevenue} format="currency" icon={FaRupeeSign} trend={stats.revenueGrowthRate} status={statsStatus} color="info" /></Grid>
+          </Grid>
+
+          {/* Revenue + distribution */}
+          <Grid container spacing={2} sx={{ mb: 2 }}>
+            <Grid size={{ xs: 12, lg: 8 }}>
+              <Panel title={`Revenue, last ${range} days`} subtitle="Daily trend" status={status.revenue} onRetry={() => retry("revenue")} minHeight={260}
+                actions={
+                  <Stack direction="row" spacing={1}>
+                    <ToggleButtonGroup size="small" exclusive value={range} onChange={(_, v) => v && setRange(v)} aria-label="Revenue range">
+                      {REVENUE_RANGES.map((d) => <ToggleButton key={d} value={d} sx={{ px: 1, py: 0.25, fontSize: 11, textTransform: "none" }}>{d}D</ToggleButton>)}
+                    </ToggleButtonGroup>
+                    <ToggleButtonGroup size="small" exclusive value={chartType} onChange={(_, v) => v && setChartType(v)} aria-label="Chart type">
+                      <ToggleButton value="area" sx={{ px: 1, py: 0.25, fontSize: 11, textTransform: "none" }}>Area</ToggleButton>
+                      <ToggleButton value="bar" sx={{ px: 1, py: 0.25, fontSize: 11, textTransform: "none" }}>Bar</ToggleButton>
+                    </ToggleButtonGroup>
+                  </Stack>
+                }>
+                <MetricChart data={data.revenue} type={chartType} height={260} currency />
+              </Panel>
             </Grid>
-
-            <Grid container spacing={2} sx={{ mb:2 }}>
-              <Grid size={{xs:12, lg:8}}><GlassCard><Stack direction="row" justifyContent="space-between" mb={2}><Box><Typography variant="subtitle2" fontWeight={700}>Revenue - 7 Days</Typography><Typography variant="caption" color={COLORS.text.muted}>Trend</Typography></Box><Stack direction="row" spacing={0.5}><IconButton size="small" onClick={()=>setChartType('area')}><FaChartArea size={12}/></IconButton><IconButton size="small" onClick={()=>setChartType('bar')}><FaChartBar size={12}/></IconButton></Stack></Stack><Box sx={{ height:280 }}><MetricChart data={revenueTrend} type={chartType} height={280} loading={loading.revenue} color={COLORS.primary}/></Box></GlassCard></Grid>
-              <Grid size={{xs:12, lg:4}}><GlassCard sx={{ height:'100%' }}><Typography variant="subtitle2" fontWeight={700} gutterBottom>Provider Distribution</Typography><Box sx={{ height:240 }}><ResponsiveContainer width="100%" height="100%"><PieChart><Pie data={providerData.filter(d=>d.value>0)} cx="50%" cy="50%" innerRadius={50} outerRadius={70} dataKey="value">{providerData.map((e)=><Cell key={`cell-${e.name}`} fill={e.color}/>)}</Pie><RechartsTooltip/></PieChart></ResponsiveContainer></Box></GlassCard></Grid>
+            <Grid size={{ xs: 12, lg: 4 }}>
+              <Panel title="Provider distribution" status={status.providers} onRetry={() => retry("providers")} minHeight={260}>
+                {pieData.length === 0 ? <EmptyState text="No providers yet" minHeight={260} /> : (
+                  <>
+                    <Box sx={{ height: 180 }}>
+                      <ResponsiveContainer width="100%" height="100%">
+                        <PieChart>
+                          <Pie data={pieData} cx="50%" cy="50%" innerRadius={50} outerRadius={75} dataKey="value" nameKey="name" paddingAngle={2}>
+                            {pieData.map((e) => <Cell key={e.name} fill={e.color} />)}
+                          </Pie>
+                          <RechartsTooltip />
+                        </PieChart>
+                      </ResponsiveContainer>
+                    </Box>
+                    <Stack spacing={0.5} mt={1}>
+                      {pieData.map((e) => (
+                        <Stack key={e.name} direction="row" justifyContent="space-between" alignItems="center">
+                          <Stack direction="row" spacing={1} alignItems="center"><Box sx={{ width: 10, height: 10, borderRadius: "50%", bgcolor: e.color }} /><Typography variant="caption">{e.name}</Typography></Stack>
+                          <Typography variant="caption" color={COLORS.muted}>{fmtNum(e.value)} ({Math.round((e.value / pieTotal) * 100)}%)</Typography>
+                        </Stack>
+                      ))}
+                    </Stack>
+                  </>
+                )}
+              </Panel>
             </Grid>
+          </Grid>
 
-            <GlassCard sx={{ mb:2 }}><Stack direction="row" justifyContent="space-between" mb={2}><Typography variant="subtitle2" fontWeight={700}>Recent Bookings</Typography><Button size="small" variant="outlined" onClick={()=>navigate('/admin/bookings')} sx={{ textTransform:'none', fontSize:11 }}>View All</Button></Stack>
-              {filteredBookings.length?<TableContainer><Table size="small"><TableHead><TableRow><TableCell sx={{fontWeight:600,fontSize:11}}>ID</TableCell><TableCell sx={{fontWeight:600,fontSize:11}}>Customer</TableCell><TableCell sx={{fontWeight:600,fontSize:11}}>Service</TableCell><TableCell sx={{fontWeight:600,fontSize:11}}>Amount</TableCell><TableCell sx={{fontWeight:600,fontSize:11}}>Status</TableCell></TableRow></TableHead><TableBody>{filteredBookings.slice(0,6).map((b)=><TableRow key={b.id || b.bookingId} hover onClick={()=>navigate(`/admin/bookings/${b.id||b.bookingId}`)} sx={{cursor:'pointer'}}><TableCell sx={{fontSize:11}}>#{b.id||b.bookingId}</TableCell><TableCell sx={{fontSize:11}}>{b.customerName||'Unknown'}</TableCell><TableCell sx={{fontSize:11}}>{b.serviceType||b.service}</TableCell><TableCell sx={{fontWeight:600,fontSize:11}}>₹{b.totalAmount||b.amount||0}</TableCell><TableCell><Chip label={b.status||'PENDING'} size="small" sx={{height:20,fontSize:9}}/></TableCell></TableRow>)}</TableBody></Table></TableContainer>:<Typography variant="caption" color={COLORS.text.muted} align="center" sx={{py:3,display:'block'}}>No bookings</Typography>}
-            </GlassCard>
+          {/* Bookings + top providers */}
+          <Grid container spacing={2} sx={{ mb: 2 }}>
+            <Grid size={{ xs: 12, lg: showTop ? 8 : 12 }}>
+              <Panel title="Recent bookings" status={status.bookings} onRetry={() => retry("bookings")} minHeight={240}
+                actions={<Button size="small" variant="outlined" onClick={() => navigate("/admin/bookings")} sx={{ textTransform: "none", fontSize: 11 }}>View all</Button>}>
+                {filteredBookings.length === 0 ? <EmptyState text={searchQuery ? "No bookings match your search" : "No bookings yet"} minHeight={160} /> : (
+                  <TableContainer>
+                    <Table size="small" aria-label="Recent bookings">
+                      <TableHead>
+                        <TableRow>{["ID", "Customer", "Service", "Amount", "Status", "When"].map((h) => <TableCell key={h} scope="col" sx={{ fontWeight: 600, fontSize: 11 }}>{h}</TableCell>)}</TableRow>
+                      </TableHead>
+                      <TableBody>
+                        {filteredBookings.slice(0, 8).map((b) => {
+                          const open = () => b.id != null && navigate(`/admin/bookings/${b.id}`);
+                          const c = STATUS_COLORS[b.status] || COLORS.muted;
+                          return (
+                            <TableRow key={b.key} hover tabIndex={b.id != null ? 0 : -1} onClick={open} onKeyDown={(e) => { if (e.key === "Enter") open(); }} sx={{ cursor: b.id != null ? "pointer" : "default" }}>
+                              <TableCell sx={{ fontSize: 11 }}>{b.id != null ? `#${b.id}` : "—"}</TableCell>
+                              <TableCell sx={{ fontSize: 11 }}>{b.customer}</TableCell>
+                              <TableCell sx={{ fontSize: 11 }}>{b.service}</TableCell>
+                              <TableCell sx={{ fontWeight: 600, fontSize: 11 }}>{fmtINR(b.amount)}</TableCell>
+                              <TableCell><Chip label={b.status.replace(/_/g, " ")} size="small" sx={{ height: 20, fontSize: 9, bgcolor: alpha(c, 0.12), color: c, fontWeight: 600 }} /></TableCell>
+                              <TableCell sx={{ fontSize: 11, color: COLORS.muted, whiteSpace: "nowrap" }}>{safeDistance(b.createdAt) || "—"}</TableCell>
+                            </TableRow>
+                          );
+                        })}
+                      </TableBody>
+                    </Table>
+                  </TableContainer>
+                )}
+              </Panel>
+            </Grid>
+            {showTop && (
+              <Grid size={{ xs: 12, lg: 4 }}>
+                <Panel title="Top providers" subtitle="By completed jobs" status={status.topProviders} onRetry={() => retry("topProviders")} minHeight={240}>
+                  {data.topProviders.length === 0 ? <EmptyState text="No provider activity yet" minHeight={160} /> : (
+                    <Stack divider={<Divider flexItem />} spacing={1}>
+                      {data.topProviders.map((p, i) => (
+                        <Stack key={p.key} direction="row" alignItems="center" spacing={1.5} onClick={() => p.id != null && navigate(`/admin/providers/${p.id}`)} sx={{ py: 0.5, cursor: p.id != null ? "pointer" : "default" }}>
+                          <Avatar sx={{ width: 30, height: 30, fontSize: 12, bgcolor: alpha(CHART_COLORS[i % CHART_COLORS.length], 0.15), color: CHART_COLORS[i % CHART_COLORS.length], fontWeight: 700 }}>{p.name[0]?.toUpperCase()}</Avatar>
+                          <Box sx={{ flex: 1, minWidth: 0 }}>
+                            <Typography variant="body2" noWrap fontWeight={600}>{p.name}</Typography>
+                            <Typography variant="caption" color={COLORS.muted}>{fmtNum(p.jobs)} jobs{p.revenue ? ` • ${fmtINR(p.revenue)}` : ""}</Typography>
+                          </Box>
+                          {p.rating > 0 && <Stack direction="row" spacing={0.5} alignItems="center"><FaStar size={11} color={COLORS.warning} /><Typography variant="caption" fontWeight={600}>{p.rating.toFixed(1)}</Typography></Stack>}
+                        </Stack>
+                      ))}
+                    </Stack>
+                  )}
+                </Panel>
+              </Grid>
+            )}
+          </Grid>
 
-            <Box sx={{ mt:4, textAlign:'center' }}><Typography variant="caption" color={COLORS.text.muted}>© {new Date().getFullYear()} Quickks Admin v13 • {connected?'🟢 Live':'⚪ Offline'}</Typography></Box>
-          </Container>
+          {/* Demand + activity */}
+          {(showDemand || showActivity) && (
+            <Grid container spacing={2} sx={{ mb: 2 }}>
+              {showDemand && (
+                <Grid size={{ xs: 12, lg: showActivity ? 6 : 12 }}>
+                  <Panel title="Service demand" subtitle="Bookings, last 30 days" status={status.demand} onRetry={() => retry("demand")} minHeight={240}>
+                    <MetricChart data={data.demand} type="bar" height={240} color={COLORS.success} />
+                  </Panel>
+                </Grid>
+              )}
+              {showActivity && (
+                <Grid size={{ xs: 12, lg: showDemand ? 6 : 12 }}>
+                  <Panel title="Recent activity" status={status.activities} onRetry={() => retry("activities")} minHeight={240}>
+                    {data.activities.length === 0 ? <EmptyState text="No recent activity" minHeight={160} /> : (
+                      <Stack spacing={1.25} sx={{ maxHeight: 280, overflowY: "auto" }}>
+                        {data.activities.map((a) => (
+                          <Stack key={a.key} direction="row" spacing={1.5} alignItems="flex-start">
+                            <Box sx={{ mt: 0.75, width: 8, height: 8, borderRadius: "50%", flexShrink: 0, bgcolor: { error: COLORS.danger, warning: COLORS.warning, success: COLORS.success }[a.type] || COLORS.info }} />
+                            <Box><Typography variant="body2">{a.text}</Typography><Typography variant="caption" color={COLORS.muted}>{safeDistance(a.at) || "Just now"}</Typography></Box>
+                          </Stack>
+                        ))}
+                      </Stack>
+                    )}
+                  </Panel>
+                </Grid>
+              )}
+            </Grid>
+          )}
 
-          <Menu anchorEl={anchorNotif} open={Boolean(anchorNotif)} onClose={()=>setAnchorNotif(null)} PaperProps={{ sx:{ width:360, maxHeight:400, borderRadius:2 } }}>
-            <Box sx={{ p:1.5, borderBottom:`1px solid ${COLORS.border}`, display:'flex', justifyContent:'space-between' }}><Typography variant="caption" fontWeight={700}>Notifications ({unreadCount})</Typography>{alerts.length>0&&<Button size="small" onClick={()=>{ setReadAlertIds(new Set(alerts.map((a,i)=>a.id??`idx-${i}`))); markAllAlertsAsRead?.(); }} sx={{fontSize:10}}>Mark read</Button>}</Box>
-            <Box sx={{ maxHeight:320, overflowY:'auto' }}>{alerts.length?alerts.slice(0,10).map((al,idx)=>{ const id=al.id??`idx-${idx}`; const read=readAlertIds.has(id); return <MenuItem key={id} sx={{ opacity:read?0.6:1 }} onClick={()=>{ setReadAlertIds(p=>new Set(p).add(id)); markAlertAsRead?.(al.id); }}><Box><Typography variant="caption" fontWeight={600}>{al.title||al.message}</Typography><Typography variant="caption" sx={{display:'block',color:COLORS.text.muted,fontSize:9}}>{al.timestamp?formatDistanceToNow(new Date(al.timestamp),{addSuffix:true}):'Just now'}</Typography></Box></MenuItem>; }):<Box sx={{p:3,textAlign:'center'}}><Typography variant="caption" color={COLORS.text.muted}>No notifications</Typography></Box>}</Box>
-          </Menu>
+          <Box sx={{ mt: 4, textAlign: "center" }}>
+            <Typography variant="caption" color={COLORS.muted}>© {new Date().getFullYear()} Quickks Admin • {connected ? "Live" : "Offline"}</Typography>
+          </Box>
+        </Container>
 
-          <Menu anchorEl={anchorUser} open={Boolean(anchorUser)} onClose={()=>setAnchorUser(null)}><MenuItem onClick={()=>{ setAnchorUser(null); navigate('/profile'); }}><FaUserCheck style={{marginRight:8}}/>Profile</MenuItem><MenuItem onClick={()=>{ setAnchorUser(null); setSettingsDrawer(true); }}><FaCog style={{marginRight:8}}/>Settings</MenuItem></Menu>
+        {/* Notifications */}
+        <Menu anchorEl={anchorNotif} open={Boolean(anchorNotif)} onClose={() => setAnchorNotif(null)} PaperProps={{ sx: { width: 360, maxWidth: "92vw", maxHeight: 420, borderRadius: 2 } }}>
+          <Box sx={{ p: 1.5, borderBottom: `1px solid ${COLORS.border}`, display: "flex", justifyContent: "space-between", alignItems: "center" }}>
+            <Typography variant="caption" fontWeight={700}>Notifications ({unreadCount} unread)</Typography>
+            {alerts.length > 0 && <Button size="small" sx={{ fontSize: 10 }} onClick={() => { setReadKeys(new Set(alerts.map((a) => a._key))); markAllAlertsAsRead?.(); }}>Mark all read</Button>}
+          </Box>
+          <Box sx={{ maxHeight: 340, overflowY: "auto" }}>
+            {alerts.length ? alerts.slice(0, 15).map((al) => (
+              <MenuItem key={al._key} sx={{ opacity: readKeys.has(al._key) ? 0.6 : 1, whiteSpace: "normal", alignItems: "flex-start", gap: 1 }}
+                onClick={() => { setReadKeys((p) => new Set(p).add(al._key)); markAlertAsRead?.(al.id); }}>
+                <Box sx={{ mt: 0.75, width: 8, height: 8, borderRadius: "50%", flexShrink: 0, bgcolor: al._color }} />
+                <Box>
+                  <Typography variant="caption" fontWeight={600}>{al.title || al.message}</Typography>
+                  <Typography variant="caption" sx={{ display: "block", color: COLORS.muted, fontSize: 10 }}>{safeDistance(al.timestamp) || "Just now"}</Typography>
+                </Box>
+              </MenuItem>
+            )) : <Box sx={{ p: 3, textAlign: "center" }}><Typography variant="caption" color={COLORS.muted}>No notifications</Typography></Box>}
+          </Box>
+        </Menu>
 
-          <Drawer anchor="right" open={settingsDrawer} onClose={()=>setSettingsDrawer(false)} PaperProps={{ sx:{ width:320, p:2.5 } }}>
-            <Stack direction="row" justifyContent="space-between" mb={2}><Typography variant="subtitle2" fontWeight={700}>Settings</Typography><IconButton size="small" onClick={()=>setSettingsDrawer(false)}><FaTimes size={14}/></IconButton></Stack>
-            <FormControlLabel control={<Switch checked={autoRefresh} onChange={e=>setAutoRefresh(e.target.checked)} size="small"/>} label={<Typography variant="caption">Auto-refresh when WS off</Typography>}/>
-          </Drawer>
+        {/* Account */}
+        <Menu anchorEl={anchorUser} open={Boolean(anchorUser)} onClose={() => setAnchorUser(null)}>
+          <Box sx={{ px: 2, py: 1 }}>
+            <Typography variant="body2" fontWeight={700}>{user?.fullName || user?.name || "Admin"}</Typography>
+            <Typography variant="caption" color={COLORS.muted}>{role.replace(/_/g, " ")}</Typography>
+          </Box>
+          <Divider />
+          <MenuItem onClick={() => { setAnchorUser(null); navigate("/profile"); }}><FaUserCheck style={{ marginRight: 8 }} />Profile</MenuItem>
+          <MenuItem onClick={() => { setAnchorUser(null); setSettingsOpen(true); }}><FaCog style={{ marginRight: 8 }} />Settings</MenuItem>
+          <MenuItem onClick={handleSignOut}><FaSignOutAlt style={{ marginRight: 8 }} />Sign out</MenuItem>
+        </Menu>
 
-          <Dialog open={exportDialog} onClose={()=>setExportDialog(false)}><DialogTitle sx={{fontSize:14,fontWeight:700}}>Export</DialogTitle><DialogContent><Typography variant="caption">Export dashboard data as CSV/Excel</Typography></DialogContent><DialogActions><Button size="small" onClick={()=>setExportDialog(false)}>Cancel</Button><Button size="small" variant="contained" onClick={()=>{ toast.success('Export queued'); setExportDialog(false); }}>Export</Button></DialogActions></Dialog>
+        {/* Settings */}
+        <Drawer anchor="right" open={settingsOpen} onClose={() => setSettingsOpen(false)} PaperProps={{ sx: { width: 320, maxWidth: "92vw", p: 2.5 } }}>
+          <Stack direction="row" justifyContent="space-between" alignItems="center" mb={2}>
+            <Typography variant="subtitle2" fontWeight={700}>Settings</Typography>
+            <IconButton size="small" onClick={() => setSettingsOpen(false)} aria-label="Close settings"><FaTimes size={14} /></IconButton>
+          </Stack>
+          <FormControlLabel control={<Switch checked={autoRefresh} onChange={(e) => setAutoRefresh(e.target.checked)} size="small" />} label={<Typography variant="caption">Auto-refresh when realtime is offline</Typography>} />
+          <Typography variant="caption" color={COLORS.muted} sx={{ display: "block", mt: 2, mb: 0.5 }}>Refresh interval</Typography>
+          <ToggleButtonGroup size="small" exclusive value={refreshSeconds} onChange={(_, v) => v && setRefreshSeconds(v)} disabled={!autoRefresh} aria-label="Refresh interval">
+            {INTERVAL_OPTIONS.map((s) => <ToggleButton key={s} value={s} sx={{ px: 1.5, textTransform: "none", fontSize: 12 }}>{s}s</ToggleButton>)}
+          </ToggleButtonGroup>
+        </Drawer>
 
-          <ToastContainer position="bottom-right" autoClose={3000} />
-        </Box>
-      </LocalizationProvider>
+        {/* Export */}
+        <Dialog open={exportOpen} onClose={() => setExportOpen(false)} maxWidth="xs" fullWidth>
+          <DialogTitle sx={{ fontSize: 15, fontWeight: 700 }}>Export data (CSV)</DialogTitle>
+          <DialogContent>
+            <Stack>
+              {[{ id: "summary", label: "Summary (all KPIs)" }, { id: "bookings", label: "Recent bookings" }, { id: "revenue", label: `Revenue trend (${range} days)` }].map((o) => (
+                <FormControlLabel key={o.id} label={<Typography variant="body2">{o.label}</Typography>}
+                  control={<Checkbox size="small" checked={exportChoices[o.id]} onChange={(e) => setExportChoices((p) => ({ ...p, [o.id]: e.target.checked }))} />} />
+              ))}
+            </Stack>
+          </DialogContent>
+          <DialogActions>
+            <Button size="small" onClick={() => setExportOpen(false)}>Cancel</Button>
+            <Button size="small" variant="contained" onClick={handleExport} disabled={!Object.values(exportChoices).some(Boolean)}>Download</Button>
+          </DialogActions>
+        </Dialog>
+
+        <ToastContainer position="bottom-right" autoClose={3000} />
+      </Box>
     </ErrorBoundary>
   );
 }

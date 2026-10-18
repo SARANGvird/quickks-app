@@ -45,9 +45,9 @@ const C = {
   red: "#CC0C39",
 };
 
-const FONT = '"Amazon Ember", "Segoe UI", Arial, sans-serif';
-const EXIT_KEY = "quickks_exit_shown";
-const LOCATION_KEY = "quickks_location";
+const FONT = '"【entity-Amazon¦canonical_name=Amazon】 Ember", "Segoe UI", Arial, sans-serif';
+const EXIT_KEY = "quickks_exit_shown_v67";
+const LOCATION_KEY = "quickks_location_v67";
 const DEFAULT_STATS = { totalCustomers: 8452, totalProviders: 1532, averageRating: 4.8, satisfactionRate: 99.9 };
 const HERO_INTERVAL = 6000;
 
@@ -55,27 +55,29 @@ const isDebug = env.VITE_ENABLE_DEBUG_LOGS === "true";
 const log = (...a) => { if (isDebug) console.log("[HomePage]", ...a); };
 const logError = (...a) => { console.error("[HomePage]", ...a); };
 
-// Any saved or detected location matching this is ignored (covers Ambajogai / Ambejogai / Amabajogai spellings)
 const BLOCKED_LOCATION = /am+a?b[ae]?j?ogai/i;
 
-// 8452 -> "8.5K+", 8 -> "8+" (fixes "0.0K+" when the API returns a small number)
 const formatCount = (n) => {
   const v = Number(n) || 0;
-  return v >= 1000 ? `${(v / 1000).toFixed(1)}K+` : `${v}+`;
+  if (v <= 0) return "0+";
+  if (v >= 1000000) return `${(v / 1000000).toFixed(1).replace(/\.0$/, "")}M+`;
+  if (v >= 1000) return `${(v / 1000).toFixed(1).replace(/\.0$/, "")}K+`;
+  return `${Math.round(v)}+`;
 };
 
-const isValidEmail = (email) => /^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(email);
+const isValidEmail = (email) => /^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(String(email).trim());
 
 const storage = {
   get(kind, key) {
     try { return (kind === "session" ? sessionStorage : localStorage).getItem(key); } catch { return null; }
   },
   set(kind, key, value) {
-    try { (kind === "session" ? sessionStorage : localStorage).setItem(key, value); } catch { return; }
+    try { (kind === "session" ? sessionStorage : localStorage).setItem(key, value); } catch {}
   },
+  remove(kind, key) {
+    try { (kind === "session" ? sessionStorage : localStorage).removeItem(key); } catch {}
+  }
 };
-
-/* ---------- Styled primitives ---------- */
 
 const navStyle = {
   background: "none",
@@ -94,6 +96,7 @@ const navStyle = {
   "&:hover": { borderColor: "#fff" },
   "&:focus-visible": { outline: `2px solid ${C.orange}`, outlineOffset: 1 },
 };
+
 const NavButton = styled("button")(navStyle);
 const NavRouterLink = styled(Link)(navStyle);
 
@@ -130,7 +133,7 @@ const Panel = styled(Card)({
   background: "#fff",
   border: "none",
   borderRadius: 0,
-  boxShadow: "none",
+  boxShadow: "0 2px 5px rgba(15,17,17,0.15)",
   fontFamily: FONT,
 });
 
@@ -157,8 +160,6 @@ const TextLink = styled("button")({
   "&:focus-visible": { outline: `2px solid ${C.link}`, outlineOffset: 2 },
 });
 
-/* ---------- Data ---------- */
-
 const DEFAULT_SERVICES = [
   { id: 1, icon: <Zap size={44} color="#B45309" />, title: "Electrician", description: "Fans, wiring, switchboards and emergency fixes.", color: "#FEF3C7", popular: true },
   { id: 2, icon: <Wrench size={44} color="#0E7490" />, title: "Appliance Repair", description: "Fridge, washing machine and other home appliances.", color: "#CFFAFE" },
@@ -177,17 +178,16 @@ const Footer = lazy(() => import("../components/Footer").catch(() => ({
 })));
 
 function Stars({ value = 4.8, size = 16 }) {
-  const rounded = Math.round(Number(value) || 0);
+  const v = Math.max(0, Math.min(5, Number(value) || 0));
+  const rounded = Math.round(v);
   return (
-    <Box component="span" role="img" aria-label={`${value} out of 5 stars`} sx={{ display: "inline-flex", gap: "1px", verticalAlign: "middle" }}>
+    <Box component="span" role="img" aria-label={`${v} out of 5 stars`} sx={{ display: "inline-flex", gap: "1px", verticalAlign: "middle" }}>
       {[1, 2, 3, 4, 5].map((n) => (
         <Star key={n} size={size} color={C.orange} fill={n <= rounded ? C.orange : "none"} />
       ))}
     </Box>
   );
 }
-
-/* ---------- Page ---------- */
 
 export default function HomePage() {
   const { isAuthenticated, user } = useAuth();
@@ -203,7 +203,8 @@ export default function HomePage() {
 
   const [location, setLocation] = useState(() => {
     const saved = storage.get("local", LOCATION_KEY) || "";
-    return BLOCKED_LOCATION.test(saved) ? "" : saved;
+    if (!saved || BLOCKED_LOCATION.test(saved)) return "";
+    return saved;
   });
   const [loadingLocation, setLoadingLocation] = useState(false);
   const [showLocationDialog, setShowLocationDialog] = useState(false);
@@ -228,11 +229,10 @@ export default function HomePage() {
     return () => { mountedRef.current = false; };
   }, []);
 
-  /* Exit intent */
   useEffect(() => {
     if (isAuthenticated || storage.get("session", EXIT_KEY)) return undefined;
     const onMouseLeave = (e) => {
-      if (e.clientY <= 0) {
+      if (e.clientY <= 0 && mountedRef.current) {
         storage.set("session", EXIT_KEY, "1");
         setShowExitIntent(true);
         document.removeEventListener("mouseleave", onMouseLeave);
@@ -242,7 +242,6 @@ export default function HomePage() {
     return () => document.removeEventListener("mouseleave", onMouseLeave);
   }, [isAuthenticated]);
 
-  /* Stats + popular services */
   useEffect(() => {
     const controller = new AbortController();
     const { signal } = controller;
@@ -250,35 +249,37 @@ export default function HomePage() {
     const fetchHomeStats = async () => {
       try {
         const data = (await homeService.getStats(signal)) || {};
-        if (signal.aborted) return;
+        if (signal.aborted || !mountedRef.current) return;
+        const payload = data.data || data;
         setLiveStats({
-          totalCustomers: data.totalCustomers || data.customers || DEFAULT_STATS.totalCustomers,
-          totalProviders: data.totalProviders || data.providers || DEFAULT_STATS.totalProviders,
-          averageRating: data.averageRating || data.rating || DEFAULT_STATS.averageRating,
-          satisfactionRate: data.satisfactionRate || DEFAULT_STATS.satisfactionRate,
+          totalCustomers: Number(payload.totalCustomers || payload.customers || DEFAULT_STATS.totalCustomers),
+          totalProviders: Number(payload.totalProviders || payload.providers || DEFAULT_STATS.totalProviders),
+          averageRating: Number(payload.averageRating || payload.rating || DEFAULT_STATS.averageRating),
+          satisfactionRate: Number(payload.satisfactionRate || DEFAULT_STATS.satisfactionRate),
         });
       } catch (err) {
         if (err?.name === "CanceledError" || err?.code === "ERR_CANCELED" || signal.aborted) return;
-        logError("Stats fetch failed, using default", err?.response?.status || err?.message);
+        logError("Stats fetch failed", err?.response?.status || err?.message);
       } finally {
-        if (!signal.aborted) setIsLoadingStats(false);
+        if (!signal.aborted && mountedRef.current) setIsLoadingStats(false);
       }
     };
 
     const fetchServices = async () => {
       try {
         const data = await homeService.getPopularServices(signal);
-        if (signal.aborted) return;
-        if (Array.isArray(data) && data.length > 0) {
-          setServices(data.map((s, idx) => {
+        if (signal.aborted || !mountedRef.current) return;
+        const list = Array.isArray(data) ? data : data?.data || data?.items || [];
+        if (Array.isArray(list) && list.length > 0) {
+          setServices(list.map((s, idx) => {
             const fallback = DEFAULT_SERVICES[idx % DEFAULT_SERVICES.length];
             return {
               id: s.id || idx + 1,
               icon: fallback.icon,
-              title: s.title || s.name || s.serviceName || "Service",
-              description: s.description || s.desc || "Trusted home service",
+              title: s.title || s.name || s.serviceName || fallback.title,
+              description: s.description || s.desc || fallback.description,
               color: fallback.color,
-              popular: Boolean(s.popular),
+              popular: Boolean(s.popular) || idx === 0,
               rating: s.rating || s.averageRating || null,
               price: s.startingPrice || s.price || null,
             };
@@ -286,9 +287,9 @@ export default function HomePage() {
         }
       } catch (err) {
         if (err?.name === "CanceledError" || err?.code === "ERR_CANCELED" || signal.aborted) return;
-        logError("Services fetch failed, using default", err?.response?.status || err?.message);
+        logError("Services fetch failed", err?.response?.status || err?.message);
       } finally {
-        if (!signal.aborted) setIsLoadingServices(false);
+        if (!signal.aborted && mountedRef.current) setIsLoadingServices(false);
       }
     };
 
@@ -296,7 +297,7 @@ export default function HomePage() {
     fetchServices();
 
     const interval = setInterval(() => {
-      if (document.visibilityState === "visible") fetchHomeStats();
+      if (document.visibilityState === "visible" && mountedRef.current) fetchHomeStats();
     }, 60000);
 
     return () => {
@@ -306,14 +307,18 @@ export default function HomePage() {
   }, []);
 
   const showMessage = useCallback((message, severity = "success") => {
-    setSnackbar({ open: true, message, severity });
+    setSnackbar({ open: true, message: String(message).slice(0, 300), severity });
   }, []);
 
   const saveLocation = useCallback((city) => {
-    if (BLOCKED_LOCATION.test(city)) return;
-    setLocation(city);
-    storage.set("local", LOCATION_KEY, city);
-    showMessage(`Location set to ${city}`);
+    const clean = String(city || "").trim().slice(0, 100);
+    if (!clean || BLOCKED_LOCATION.test(clean)) {
+      showMessage("Please enter a valid city", "warning");
+      return;
+    }
+    setLocation(clean);
+    storage.set("local", LOCATION_KEY, clean);
+    showMessage(`Location set to ${clean}`);
   }, [showMessage]);
 
   const detectLocation = useCallback(async () => {
@@ -324,13 +329,13 @@ export default function HomePage() {
     setLoadingLocation(true);
     try {
       const pos = await new Promise((resolve, reject) => {
-        navigator.geolocation.getCurrentPosition(resolve, reject, { enableHighAccuracy: false, timeout: 8000, maximumAge: 600000 });
+        navigator.geolocation.getCurrentPosition(resolve, reject, { enableHighAccuracy: false, timeout: 10000, maximumAge: 600000 });
       });
       const { latitude, longitude } = pos.coords;
       const res = await fetch(`https://nominatim.openstreetmap.org/reverse?format=json&lat=${latitude}&lon=${longitude}&zoom=10`, { headers: { "Accept-Language": "en" } });
       if (!res.ok) throw new Error("reverse geocode failed");
       const data = await res.json();
-      const city = data?.address?.city || data?.address?.town || data?.address?.county || data?.address?.state_district;
+      const city = data?.address?.city || data?.address?.town || data?.address?.village || data?.address?.county || data?.address?.state_district;
       if (!city) throw new Error("no city found");
       if (mountedRef.current) {
         saveLocation(city);
@@ -394,11 +399,9 @@ export default function HomePage() {
     el.scrollBy({ left: dir * el.clientWidth * 0.85, behavior: prefersReducedMotion ? "auto" : "smooth" });
   }, [prefersReducedMotion]);
 
-  /* ---------- Derived ---------- */
-
   const cta = useMemo(() => {
     if (!isAuthenticated) return { label: "Get started free", action: () => navigate("/register") };
-    const role = user?.role?.toUpperCase();
+    const role = String(user?.role || "").toUpperCase().replace(/^ROLE_/, "");
     if (role === "ADMIN" || role === "SUPER_ADMIN") return { label: "Go to admin", action: () => navigate("/admin/dashboard") };
     if (role === "PROVIDER") return { label: "Provider dashboard", action: () => navigate("/provider/dashboard") };
     return { label: "My dashboard", action: () => navigate("/customer/dashboard") };
@@ -427,8 +430,8 @@ export default function HomePage() {
     return [
       { value: isLoadingStats ? placeholder : formatCount(liveStats.totalCustomers), label: "Happy customers" },
       { value: isLoadingStats ? placeholder : formatCount(liveStats.totalProviders), label: "Verified professionals" },
-      { value: isLoadingStats ? placeholder : `${liveStats.averageRating}`, label: "Average rating", stars: true },
-      { value: isLoadingStats ? placeholder : `${liveStats.satisfactionRate}%`, label: "Customer satisfaction" },
+      { value: isLoadingStats ? placeholder : `${Number(liveStats.averageRating).toFixed(1)}`, label: "Average rating", stars: true },
+      { value: isLoadingStats ? placeholder : `${Number(liveStats.satisfactionRate).toFixed(1)}%`, label: "Customer satisfaction" },
     ];
   }, [liveStats, isLoadingStats]);
 
@@ -439,7 +442,7 @@ export default function HomePage() {
     { label: "Contact", to: "/contact" },
   ], []);
 
-  const categories = useMemo(() => ["All", ...Array.from(new Set(services.map((s) => s.title)))], [services]);
+  const categories = useMemo(() => ["All", ...Array.from(new Set(services.map((s) => s.title).filter(Boolean)))], [services]);
 
   const visibleServices = useMemo(() => {
     const q = query.trim().toLowerCase();
@@ -456,16 +459,15 @@ export default function HomePage() {
     { title: "Power cut? Appliance down? We are on it", text: "Emergency electrical fixes and appliance repair from nearby professionals who can reach you fast.", from: "#4A2C0A", to: "#9A5B13" },
   ], []);
 
-  /* Hero auto-rotate (pauses on hover, respects reduced motion) */
   useEffect(() => {
     if (heroPaused || prefersReducedMotion) return undefined;
     const t = setInterval(() => setHeroIndex((i) => (i + 1) % heroSlides.length), HERO_INTERVAL);
     return () => clearInterval(t);
   }, [heroPaused, prefersReducedMotion, heroSlides.length]);
 
-  const greetingName = user?.name || user?.firstName || user?.fullName || "there";
+  const greetingName = user?.name || user?.firstName || user?.fullName || user?.email?.split("@")[0] || "there";
   const closeSnackbar = () => setSnackbar((p) => ({ ...p, open: false }));
-  const slide = heroSlides[heroIndex];
+  const slide = heroSlides[heroIndex] || heroSlides[0];
 
   const jsonLd = JSON.stringify({
     "@context": "https://schema.org",
@@ -476,8 +478,6 @@ export default function HomePage() {
     email: CONTACT.EMAIL,
     areaServed: location || "India",
   });
-
-  /* ---------- Header pieces ---------- */
 
   const locationBlock = (
     <Box
@@ -528,10 +528,8 @@ export default function HomePage() {
     </Box>
   );
 
-  /* ---------- Reusable service card (carousel + grid) ---------- */
-
-  const ServiceCard = ({ s, compact = false }) => (
-    <Box sx={{ display: "flex", flexDirection: "column", height: "100%", p: compact ? 0 : 0 }}>
+  const ServiceCard = ({ s }) => (
+    <Box sx={{ display: "flex", flexDirection: "column", height: "100%" }}>
       <Box sx={{ position: "relative", height: 150, bgcolor: s.color, display: "flex", alignItems: "center", justifyContent: "center", mb: 1.5 }}>
         {s.icon}
         {s.popular && (
@@ -554,8 +552,6 @@ export default function HomePage() {
     </Box>
   );
 
-  /* ---------- Render ---------- */
-
   return (
     <ErrorBoundary>
       <Helmet>
@@ -572,7 +568,6 @@ export default function HomePage() {
       <Box sx={{ minHeight: "100vh", bgcolor: C.bg, fontFamily: FONT, color: C.text, overflowX: "hidden" }}>
         <FloatingContactButton onClick={handleWhatsApp} aria-label="Chat on WhatsApp"><FaWhatsapp size={28} /></FloatingContactButton>
 
-        {/* ===== Header ===== */}
         <Box component="header" sx={{ position: "sticky", top: 0, zIndex: 1000 }}>
           <Box sx={{ bgcolor: C.header, py: 1 }}>
             <Container maxWidth="xl">
@@ -642,7 +637,6 @@ export default function HomePage() {
           )}
         </Box>
 
-        {/* ===== Mobile / All drawer ===== */}
         <Drawer anchor={isMobile ? "right" : "left"} open={mobileMenuOpen} onClose={() => setMobileMenuOpen(false)} PaperProps={{ sx: { width: 300, bgcolor: "#fff", color: C.text } }}>
           <Box sx={{ bgcolor: C.sub, color: "#fff", p: 2, display: "flex", justifyContent: "space-between", alignItems: "center" }}>
             <Box sx={{ display: "flex", alignItems: "center", gap: 1 }}>
@@ -677,7 +671,6 @@ export default function HomePage() {
         </Drawer>
 
         <Box component="main">
-          {/* ===== Hero carousel ===== */}
           <Box
             onMouseEnter={() => setHeroPaused(true)}
             onMouseLeave={() => setHeroPaused(false)}
@@ -711,10 +704,8 @@ export default function HomePage() {
             </Box>
           </Box>
 
-          {/* ===== Overlapping quick-card row (Amazon signature) ===== */}
           <Container maxWidth="xl" sx={{ mt: { xs: -18, md: -26 }, position: "relative", zIndex: 1 }}>
             <Box sx={{ display: "grid", gridTemplateColumns: { xs: "1fr", sm: "repeat(2, 1fr)", lg: "repeat(4, 1fr)" }, gap: 2.5 }}>
-              {/* Sign-in / welcome card */}
               <Panel sx={{ p: 2.5, display: "flex", flexDirection: "column" }}>
                 {isAuthenticated ? (
                   <>
@@ -734,7 +725,6 @@ export default function HomePage() {
                 )}
               </Panel>
 
-              {/* Three quick cards from the popular services */}
               {services.slice(0, 3).map((s, idx) => (
                 <Panel key={`quick-${s.id || idx}`} sx={{ p: 2.5, display: "flex", flexDirection: "column" }}>
                   <Typography component="h2" sx={{ fontSize: 21, fontWeight: 700, mb: 1.5, fontFamily: FONT }}>{s.title}</Typography>
@@ -746,7 +736,6 @@ export default function HomePage() {
             </Box>
           </Container>
 
-          {/* ===== Stats strip ===== */}
           <Container maxWidth="xl" sx={{ mt: 2.5 }}>
             <Panel sx={{ p: 2 }}>
               <Box sx={{ display: "grid", gridTemplateColumns: { xs: "repeat(2, 1fr)", md: "repeat(4, 1fr)" }, gap: 2 }}>
@@ -761,7 +750,6 @@ export default function HomePage() {
             </Panel>
           </Container>
 
-          {/* ===== Popular services (carousel row) ===== */}
           <Box ref={servicesRef} id="services" sx={{ pt: 2.5, scrollMarginTop: 130 }}>
             <Container maxWidth="xl">
               <Panel sx={{ p: { xs: 2, md: 2.5 }, position: "relative" }}>
@@ -807,7 +795,6 @@ export default function HomePage() {
             </Container>
           </Box>
 
-          {/* ===== Why Quickks ===== */}
           <Box ref={featuresRef} id="features" sx={{ pt: 2.5, scrollMarginTop: 130 }}>
             <Container maxWidth="xl">
               <Panel sx={{ p: { xs: 2, md: 2.5 } }}>
@@ -825,7 +812,6 @@ export default function HomePage() {
             </Container>
           </Box>
 
-          {/* ===== How it works ===== */}
           <Box sx={{ pt: 2.5 }}>
             <Container maxWidth="xl">
               <Panel sx={{ p: { xs: 2, md: 2.5 } }}>
@@ -845,7 +831,6 @@ export default function HomePage() {
             </Container>
           </Box>
 
-          {/* ===== Bottom sign-in strip (Amazon "See personalized recommendations") ===== */}
           <Box sx={{ py: 3 }}>
             <Container maxWidth="xl">
               <Panel sx={{ p: { xs: 2.5, md: 4 }, textAlign: "center", borderTop: `1px solid ${C.border}` }}>
@@ -862,7 +847,6 @@ export default function HomePage() {
           </Box>
         </Box>
 
-        {/* ===== Back to top + footer ===== */}
         <Box component="button" type="button" onClick={() => window.scrollTo({ top: 0, behavior: prefersReducedMotion ? "auto" : "smooth" })} sx={{ display: "block", width: "100%", bgcolor: C.slate, color: "#fff", border: "none", py: 1.75, cursor: "pointer", fontSize: 13, fontFamily: FONT, "&:hover": { bgcolor: "#485769" }, "&:focus-visible": { outline: `2px solid ${C.orange}`, outlineOffset: -2 } }}>
           Back to top
         </Box>
@@ -871,7 +855,6 @@ export default function HomePage() {
           <Footer />
         </Suspense>
 
-        {/* ===== Dialogs ===== */}
         <Dialog open={showExitIntent && !isAuthenticated} onClose={() => setShowExitIntent(false)} maxWidth="xs" fullWidth PaperProps={{ sx: { borderRadius: 2 } }}>
           <DialogTitle sx={{ fontWeight: 700, fontFamily: FONT }}>Get ₹100 off your first booking</DialogTitle>
           <DialogContent>
@@ -888,7 +871,7 @@ export default function HomePage() {
           </DialogContent>
           <DialogActions sx={{ p: 2 }}>
             <SecondaryButton onClick={() => setShowExitIntent(false)}>No thanks</SecondaryButton>
-            <PrimaryButton onClick={handleNewsletter} disabled={exitIntentSubmitting}>
+            <PrimaryButton onClick={handleNewsletter} disabled={exitIntentSubmitting || !isValidEmail(exitEmail)}>
               {exitIntentSubmitting ? <CircularProgress size={20} /> : "Send my offer"}
             </PrimaryButton>
           </DialogActions>

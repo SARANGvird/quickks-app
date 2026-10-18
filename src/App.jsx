@@ -1,10 +1,9 @@
-// src/App.jsx - v23 FINAL - ProtectedRoute in routes/ + SINGLE AnalyticsTracker
-import React, { Suspense, lazy, useEffect } from 'react';
+import React, { Suspense, lazy, useEffect, useMemo } from 'react';
 import { Routes, Route, Navigate, Link, Outlet, useLocation } from 'react-router-dom';
 import { Toaster } from 'react-hot-toast';
 import { useAuth } from './contexts/AuthContext';
 import { PaymentProvider } from './contexts/PaymentContext';
-import ProtectedRoute from './routes/ProtectedRoute'; // <-- FIXED: routes madhe aahe
+import ProtectedRoute from './routes/ProtectedRoute';
 import AnalyticsTracker from './components/AnalyticsTracker';
 import ErrorBoundary from './components/ErrorBoundary';
 import LoadingSpinner from './components/LoadingSpinner';
@@ -12,13 +11,24 @@ import HomePage from './pages/HomePage';
 
 const RELEASE = import.meta.env.VITE_VERSION || '1.0.0';
 const ADMIN_ROLES = ['ADMIN', 'SUPER_ADMIN'];
-const wait = ms => new Promise(r => setTimeout(r, ms));
+const PROVIDER_ROLES = ['PROVIDER', 'SERVICE_PROVIDER'];
+
+const normalizeRole = (r) => String(r || '').toUpperCase().replace(/^ROLE_/, '');
+
+const wait = (ms) => new Promise((res) => setTimeout(res, ms));
 const lazyWithRetry = (factory, { retries = 2, delay = 800 } = {}) =>
   lazy(async () => {
     let lastErr;
     for (let i = 0; i <= retries; i++) {
-      try { return await factory(); } catch (e) { lastErr = e; if (i < retries) await wait(delay * (i + 1)); }
+      try {
+        const mod = await factory();
+        return mod;
+      } catch (e) {
+        lastErr = e;
+        if (i < retries) await wait(delay * (i + 1));
+      }
     }
+    console.error('[App] Chunk load failed after retry', lastErr);
     throw lastErr;
   });
 
@@ -30,11 +40,11 @@ const ScrollToTop = () => {
 
 const DashboardRedirect = () => {
   const { user, isAuthenticated, loading } = useAuth();
+  const role = useMemo(() => normalizeRole(user?.role), [user?.role]);
   if (loading) return <LoadingSpinner fullScreen />;
   if (!isAuthenticated) return <Navigate to="/login" replace />;
-  const role = user?.role?.toUpperCase();
-  if (role === 'ADMIN' || role === 'SUPER_ADMIN') return <Navigate to="/admin/dashboard" replace />;
-  if (role === 'PROVIDER' || role === 'SERVICE_PROVIDER') return <Navigate to="/provider/dashboard" replace />;
+  if (ADMIN_ROLES.includes(role)) return <Navigate to="/admin/dashboard" replace />;
+  if (PROVIDER_ROLES.includes(role)) return <Navigate to="/provider/dashboard" replace />;
   return <Navigate to="/customer/dashboard" replace />;
 };
 
@@ -67,14 +77,28 @@ const AdminAnalyticsPage = lazyWithRetry(() => import('./pages/Admin/Analytics')
 const AdminReviewsPage = lazyWithRetry(() => import('./pages/Admin/ReviewsPage'));
 const AdminSettingsPage = lazyWithRetry(() => import('./pages/Admin/SettingsPage'));
 
-const AdminShell = () => <AdminLayout><Outlet /></AdminLayout>;
-const Unauthorized = () => (<div style={{ textAlign: 'center', marginTop: 100 }}><h2>Access denied</h2><Link to="/">Home</Link></div>);
+const AdminShell = () => (
+  <AdminLayout>
+    <Outlet />
+  </AdminLayout>
+);
+
+const Unauthorized = () => (
+  <div style={{ textAlign: 'center', marginTop: 100, padding: 24 }}>
+    <h2 style={{ fontWeight: 800 }}>403 - Access Denied</h2>
+    <p style={{ color: '#64748b', marginTop: 8 }}>You don't have permission to view this page</p>
+    <Link to="/" style={{ color: '#6366f1', fontWeight: 700, marginTop: 16, display: 'inline-block' }}>Go Home</Link>
+  </div>
+);
+
+const RouteFallback = () => <LoadingSpinner fullScreen text="Loading..." />;
 
 const AppRoutes = () => {
   const { loading } = useAuth();
-  if (loading) return <LoadingSpinner fullScreen />;
+  if (loading) return <RouteFallback />;
+
   return (
-    <Suspense fallback={<LoadingSpinner fullScreen />}>
+    <Suspense fallback={<RouteFallback />}>
       <ScrollToTop />
       <AnalyticsTracker />
       <Routes>
@@ -95,9 +119,41 @@ const AppRoutes = () => {
         <Route path="/payment/failed" element={<PaymentFailed />} />
         <Route path="/dashboard" element={<DashboardRedirect />} />
         <Route path="/dashboard/*" element={<Navigate to="/dashboard" replace />} />
-        <Route element={<ProtectedRoute allowedRoles={['CUSTOMER']} />}><Route path="/customer/dashboard" element={<CustomerDashboard />} /></Route>
-        <Route element={<ProtectedRoute allowedRoles={['PROVIDER', 'SERVICE_PROVIDER']} />}><Route path="/provider/dashboard" element={<ProviderDashboard />} /><Route path="/provider/profile" element={<ProviderProfile />} /><Route path="/provider/profile/edit" element={<ProviderForm />} /><Route path="/provider/create" element={<ProviderForm />} /><Route path="/provider/bookings" element={<ProviderMyBookings />} /><Route path="/provider/strikes" element={<ProviderStrikesPage />} /></Route>
-        <Route element={<ProtectedRoute allowedRoles={ADMIN_ROLES} />}><Route path="/admin" element={<Navigate to="/admin/dashboard" replace />} /><Route path="/admin/dashboard" element={<AdminDashboard />} /><Route element={<AdminShell />}><Route path="/admin/users/*" element={<AdminUsersPage />} /><Route path="/admin/providers/*" element={<AdminProvidersPage />} /><Route path="/admin/bookings/*" element={<AdminBookingsPage />} /><Route path="/admin/complaints/*" element={<AdminComplaintsPage />} /><Route path="/admin/analytics/*" element={<AdminAnalyticsPage />} /><Route path="/admin/reviews/*" element={<AdminReviewsPage />} /><Route path="/admin/settings/*" element={<AdminSettingsPage />} /></Route></Route>
+
+        <Route element={<ProtectedRoute allowedRoles={['CUSTOMER']} />}>
+          <Route path="/customer/dashboard" element={<CustomerDashboard />} />
+        </Route>
+
+        <Route element={<ProtectedRoute allowedRoles={PROVIDER_ROLES} />}>
+          <Route path="/provider/dashboard" element={<ProviderDashboard />} />
+          <Route path="/provider/profile" element={<ProviderProfile />} />
+          <Route path="/provider/profile/edit" element={<ProviderForm />} />
+          <Route path="/provider/create" element={<ProviderForm />} />
+          <Route path="/provider/bookings" element={<ProviderMyBookings />} />
+          <Route path="/provider/strikes" element={<ProviderStrikesPage />} />
+        </Route>
+
+        <Route element={<ProtectedRoute allowedRoles={ADMIN_ROLES} />}>
+          <Route path="/admin" element={<Navigate to="/admin/dashboard" replace />} />
+          <Route element={<AdminShell />}>
+            <Route path="/admin/dashboard" element={<AdminDashboard />} />
+            <Route path="/admin/users" element={<AdminUsersPage />} />
+            <Route path="/admin/users/*" element={<AdminUsersPage />} />
+            <Route path="/admin/providers" element={<AdminProvidersPage />} />
+            <Route path="/admin/providers/*" element={<AdminProvidersPage />} />
+            <Route path="/admin/bookings" element={<AdminBookingsPage />} />
+            <Route path="/admin/bookings/*" element={<AdminBookingsPage />} />
+            <Route path="/admin/complaints" element={<AdminComplaintsPage />} />
+            <Route path="/admin/complaints/*" element={<AdminComplaintsPage />} />
+            <Route path="/admin/analytics" element={<AdminAnalyticsPage />} />
+            <Route path="/admin/analytics/*" element={<AdminAnalyticsPage />} />
+            <Route path="/admin/reviews" element={<AdminReviewsPage />} />
+            <Route path="/admin/reviews/*" element={<AdminReviewsPage />} />
+            <Route path="/admin/settings" element={<AdminSettingsPage />} />
+            <Route path="/admin/settings/*" element={<AdminSettingsPage />} />
+          </Route>
+        </Route>
+
         <Route path="/:slug" element={<DynamicServicePage />} />
         <Route path="*" element={<NotFoundPage />} />
       </Routes>
@@ -105,5 +161,13 @@ const AppRoutes = () => {
   );
 };
 
-const App = () => (<ErrorBoundary variant="page" release={RELEASE}><PaymentProvider><AppRoutes /><Toaster position="top-right" toastOptions={{ duration: 4000, style: { background: '#363636', color: '#fff' } }} /></PaymentProvider></ErrorBoundary>);
+const App = () => (
+  <ErrorBoundary variant="page" release={RELEASE}>
+    <PaymentProvider>
+      <AppRoutes />
+      <Toaster position="top-right" toastOptions={{ duration: 4000, style: { background: '#111827', color: '#fff', borderRadius: 12, fontWeight: 600, fontSize: 13 } }} />
+    </PaymentProvider>
+  </ErrorBoundary>
+);
+
 export default App;

@@ -59,7 +59,7 @@ const safeDistance = (value) => {
 const toArray = (payload, depth = 0) => {
   if (payload == null) return [];
   if (Array.isArray(payload)) return payload;
-  if (typeof payload !== "object" || depth > 6) return [];
+  if (typeof payload !== "object" || depth > 8) return [];
   if (payload.data !== undefined) {
     if (Array.isArray(payload.data)) return payload.data;
     const inner = payload.data;
@@ -75,6 +75,7 @@ const toArray = (payload, depth = 0) => {
         const rr = toArray(inner.data, depth + 1);
         if (rr.length > 0) return rr;
       }
+      return [inner];
     }
   }
   const direct = payload.content ?? payload.items ?? payload.results ?? payload.records ?? payload.list ?? payload.rows ?? payload.bookings ?? payload.providers ?? payload.activities;
@@ -83,6 +84,7 @@ const toArray = (payload, depth = 0) => {
     const r = toArray(direct, depth + 1);
     if (r.length > 0) return r;
   }
+  if (Object.keys(payload).some((k) => STAT_KEYS.includes(k))) return [payload];
   return [];
 };
 
@@ -93,12 +95,13 @@ const STAT_KEYS = [
 
 const normalizeStats = (raw) => {
   let d = raw;
-  for (let i = 0; i < 6 && d && typeof d === "object" && !Array.isArray(d) && d.totalUsers == null; i += 1) {
+  for (let i = 0; i < 8 && d && typeof d === "object" && !Array.isArray(d) && d.totalUsers == null; i += 1) {
     if (d.data && typeof d.data === "object") d = d.data;
     else if (d.dashboardStats) d = d.dashboardStats;
+    else if (d.stats) d = d.stats;
     else break;
   }
-  d = d?.dashboardStats || d || {};
+  d = d?.dashboardStats || d?.stats || d || {};
   if (Array.isArray(d)) d = d[0] || {};
   return Object.fromEntries(STAT_KEYS.map((k) => [k, num(d[k])]));
 };
@@ -109,10 +112,10 @@ const labelFromDate = (value) => {
 };
 
 const mapSeries = (raw) => {
-  const arr = toArray(raw);
+  const arr = Array.isArray(raw) ? raw : toArray(raw);
   if (!arr.length) return [];
   return arr.map((it, i) => ({
-    name: it?.label || it?.name || (it?.date && labelFromDate(it.date)) || `#${i + 1}`,
+    name: it?.label || it?.name || it?.date ? labelFromDate(it.date) || `#${i + 1}` : `#${i + 1}`,
     value: num(it?.value ?? it?.amount ?? it?.revenue ?? it?.total ?? it?.count),
     raw: it,
   }));
@@ -121,14 +124,14 @@ const mapSeries = (raw) => {
 const colorByName = (() => {
   const map = new Map();
   return (name) => {
-    const key = name || "Unknown";
+    const key = String(name || "Unknown");
     if (!map.has(key)) map.set(key, CHART_COLORS[map.size % CHART_COLORS.length]);
     return map.get(key);
   };
 })();
 
 const mapDistribution = (raw) => {
-  const arr = toArray(raw);
+  const arr = Array.isArray(raw) ? raw : toArray(raw);
   if (!arr.length) return [];
   return arr.map((i) => {
     const name = i?.label || i?.name || "Unknown";
@@ -137,7 +140,7 @@ const mapDistribution = (raw) => {
 };
 
 const mapBookings = (raw) => {
-  const arr = toArray(raw);
+  const arr = Array.isArray(raw) ? raw : toArray(raw);
   if (!arr.length) return [];
   return arr.map((b, i) => ({
     key: b?.id ?? b?.bookingId ?? `row-${i}`,
@@ -151,7 +154,7 @@ const mapBookings = (raw) => {
 };
 
 const mapTopProviders = (raw) => {
-  const arr = toArray(raw);
+  const arr = Array.isArray(raw) ? raw : toArray(raw);
   if (!arr.length) return [];
   return arr.map((p, i) => ({
     key: p?.id ?? p?.providerId ?? `prov-${i}`,
@@ -164,7 +167,7 @@ const mapTopProviders = (raw) => {
 };
 
 const mapActivities = (raw) => {
-  const arr = toArray(raw);
+  const arr = Array.isArray(raw) ? raw : toArray(raw);
   if (!arr.length) return [];
   return arr.map((a, i) => ({
     key: a?.id ?? `act-${i}`,
@@ -187,13 +190,13 @@ const callOptional = (names, ...args) => {
 };
 
 const PANELS = {
-  stats: { fetch: (s) => adminService.getDashboardStats(s), map: normalizeStats },
-  providers: { fetch: (s) => adminService.getProviderDistribution(s), map: mapDistribution },
-  revenue: { fetch: (s, p) => adminService.getRevenueTrend({ days: p.days }, s), map: mapSeries },
-  bookings: { fetch: (s) => adminService.getRecentBookings({ limit: 10 }, s), map: mapBookings },
-  topProviders: { fetch: (s) => callOptional(["getTopProviders"], { limit: 5 }, s), map: mapTopProviders },
-  demand: { fetch: (s) => callOptional(["getServiceDemand"], { days: 30 }, s), map: mapSeries },
-  activities: { fetch: (s) => callOptional(["getRecentActivities"], { limit: 10 }, s), map: mapActivities },
+  stats: { fetch: (s) => adminService.getDashboardStats(s), map: normalizeStats, isArray: false },
+  providers: { fetch: (s) => adminService.getProviderDistribution(s), map: mapDistribution, isArray: true },
+  revenue: { fetch: (s, p) => adminService.getRevenueTrend({ days: p.days }, s), map: mapSeries, isArray: true },
+  bookings: { fetch: (s) => adminService.getRecentBookings({ limit: 10 }, s), map: mapBookings, isArray: true },
+  topProviders: { fetch: (s) => callOptional(["getTopProviders", "getTopProvidersCompat"], { limit: 5 }, s), map: mapTopProviders, isArray: true },
+  demand: { fetch: (s) => callOptional(["getServiceDemand", "getServiceDemandCompat"], { days: 30 }, s), map: mapSeries, isArray: true },
+  activities: { fetch: (s) => callOptional(["getRecentActivities", "getRecentActivitiesCompat"], { limit: 10 }, s), map: mapActivities, isArray: true },
 };
 
 const EMPTY_DATA = {
@@ -207,6 +210,7 @@ const csvCell = (v) => {
   if (/^[=+\-@\t\r]/.test(s)) s = `'${s}`;
   return `"${s.replace(/"/g, '""')}"`;
 };
+
 const downloadCsv = (filename, rows) => {
   const body = rows.map((r) => r.map(csvCell).join(",")).join("\r\n");
   const url = URL.createObjectURL(new Blob([`\uFEFF${body}`], { type: "text/csv;charset=utf-8" }));
@@ -423,14 +427,19 @@ export default function AdminDashboard() {
     const gens = {};
     keys.forEach((k) => { genRef.current[k] = (genRef.current[k] || 0) + 1; gens[k] = genRef.current[k]; });
     const stale = () => controller.signal.aborted || !mountedRef.current;
+
     const run = async (key) => {
       const cfg = PANELS[key];
       try {
         const raw = await cfg.fetch(controller.signal, paramsRef.current);
         if (stale() || genRef.current[key] !== gens[key]) return { key, skipped: true };
         const mapped = cfg.map(raw);
-        const safeMapped = Array.isArray(mapped) ? mapped : (mapped && typeof mapped === "object" && !Array.isArray(mapped) ? mapped : []);
-        setData((p) => ({ ...p, [key]: safeMapped }));
+        if (cfg.isArray) {
+          const arr = Array.isArray(mapped) ? mapped : [];
+          setData((p) => ({ ...p, [key]: arr }));
+        } else {
+          setData((p) => ({ ...p, [key]: mapped && typeof mapped === "object" ? mapped : {} }));
+        }
         setStatus((p) => ({ ...p, [key]: { state: "ready" } }));
         return { key, ok: true };
       } catch (err) {
@@ -448,16 +457,18 @@ export default function AdminDashboard() {
         return { key, ok: false, httpStatus };
       }
     };
-    const results = await Promise.all(keys.map(run));
+
+    const results = await Promise.allSettled(keys.map(run));
+    const resolved = results.map((r) => (r.status === "fulfilled" ? r.value : { ok: false, httpStatus: 0 }));
     controllersRef.current.delete(controller);
     inflightRef.current = Math.max(0, inflightRef.current - 1);
     if (mountedRef.current) {
-      if (results.some((r) => r.ok)) setLastUpdateTime(new Date());
-      if (results.some((r) => r.httpStatus === 401)) handleUnauthorized();
-      else if (results.some((r) => r.httpStatus === 403)) setForbidden(true);
-      else if (results.some((r) => r.ok)) setForbidden(false);
+      if (resolved.some((r) => r.ok)) setLastUpdateTime(new Date());
+      if (resolved.some((r) => r.httpStatus === 401)) handleUnauthorized();
+      else if (resolved.some((r) => r.httpStatus === 403)) setForbidden(true);
+      else if (resolved.some((r) => r.ok)) setForbidden(false);
     }
-    return results;
+    return resolved;
   }, [handleUnauthorized]);
 
   useEffect(() => { if (allowed) loadPanels(ALL_PANELS); }, [allowed, loadPanels]);
@@ -472,15 +483,16 @@ export default function AdminDashboard() {
   }, [range, allowed, loadPanels]);
 
   const handleStats = useCallback((d) => {
-    const s = d?.data || d?.dashboardStats || d;
-    if (s?.totalUsers != null) {
+    if (!d) return;
+    const s = d?.data || d?.dashboardStats || d?.stats || d;
+    if (s && typeof s === "object" && s.totalUsers != null) {
       setData((p) => ({ ...p, stats: normalizeStats(s) }));
       setStatus((p) => ({ ...p, stats: { state: "ready" } }));
     }
     if (d?.revenueTrend) {
-      const arr = toArray(d.revenueTrend);
+      const arr = Array.isArray(d.revenueTrend) ? d.revenueTrend : toArray(d.revenueTrend);
       if (paramsRef.current.days === 7 && arr.length) {
-        setData((p) => ({ ...p, revenue: mapSeries(d.revenueTrend) }));
+        setData((p) => ({ ...p, revenue: mapSeries(arr) }));
         setStatus((p) => ({ ...p, revenue: { state: "ready" } }));
       }
     }
@@ -488,6 +500,7 @@ export default function AdminDashboard() {
   }, []);
 
   const handleAlert = useCallback((a) => {
+    if (!a) return;
     const n = normAlert(a);
     setAlerts((p) => (p.some((x) => x._key === n._key) ? p : [n, ...p].slice(0, 50)));
   }, []);
@@ -533,7 +546,7 @@ export default function AdminDashboard() {
     navigate("/login", { replace: true });
   }, [logout, navigate]);
 
-  const stats = data.stats;
+  const stats = data.stats || EMPTY_DATA.stats;
   const filteredBookings = useMemo(() => {
     const q = searchQuery.trim().toLowerCase();
     const arr = Array.isArray(data.bookings) ? data.bookings : [];
@@ -541,8 +554,8 @@ export default function AdminDashboard() {
     return arr.filter((b) => [b.id, b.customer, b.service, b.status].some((v) => v != null && String(v).toLowerCase().includes(q)));
   }, [data.bookings, searchQuery]);
 
-  const pieData = useMemo(() => Array.isArray(data.providers) ? data.providers.filter((d) => d.value > 0) : [], [data.providers]);
-  const pieTotal = useMemo(() => pieData.reduce((s, d) => s + d.value, 0), [pieData]);
+  const pieData = useMemo(() => Array.isArray(data.providers) ? data.providers.filter((d) => d && d.value > 0) : [], [data.providers]);
+  const pieTotal = useMemo(() => pieData.reduce((s, d) => s + num(d.value), 0), [pieData]);
   const unreadCount = useMemo(() => alerts.filter((a) => !readKeys.has(a._key)).length, [alerts, readKeys]);
   const updatedLabel = safeDistance(lastUpdated) || safeDistance(lastUpdateTime) || "just now";
 
@@ -555,7 +568,7 @@ export default function AdminDashboard() {
     const stamp = new Date().toISOString().slice(0, 10);
     let files = 0;
     if (exportChoices.summary) {
-      downloadCsv(`quickks-summary-${stamp}.csv`, [["Metric", "Value"], ...STAT_KEYS.map((k) => [k, stats[k]])]);
+      downloadCsv(`quickks-summary-${stamp}.csv`, [["Metric", "Value"], ...STAT_KEYS.map((k) => [k, stats[k] ?? 0])]);
       files += 1;
     }
     if (exportChoices.bookings) {
@@ -671,7 +684,7 @@ export default function AdminDashboard() {
                       {pieData.map((e) => (
                         <Stack key={e.name} direction="row" justifyContent="space-between" alignItems="center" sx={{ p: 1, borderRadius: 2, bgcolor: COLORS.bg, border: `1px solid ${COLORS.borderLight}`, "&:hover": { bgcolor: "white" } }}>
                           <Stack direction="row" spacing={1.25} alignItems="center"><Box sx={{ width: 12, height: 12, borderRadius: "50%", bgcolor: e.color, boxShadow: `0 2px 6px ${alpha(e.color, 0.3)}` }} /><Typography variant="caption" fontWeight={700}>{e.name}</Typography></Stack>
-                          <Typography variant="caption" sx={{ color: COLORS.muted, fontWeight: 700, bgcolor: "white", px: 1, py: 0.25, borderRadius: 1, border: `1px solid ${COLORS.borderLight}` }}>{fmtNum(e.value)} • {Math.round((e.value / pieTotal) * 100)}%</Typography>
+                          <Typography variant="caption" sx={{ color: COLORS.muted, fontWeight: 700, bgcolor: "white", px: 1, py: 0.25, borderRadius: 1, border: `1px solid ${COLORS.borderLight}` }}>{fmtNum(e.value)} • {pieTotal ? Math.round((e.value / pieTotal) * 100) : 0}%</Typography>
                         </Stack>
                       ))}
                     </Stack>

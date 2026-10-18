@@ -1,4 +1,4 @@
-import { useEffect, useState, useCallback, useRef, useMemo } from "react";
+ import { useEffect, useState, useCallback, useRef, useMemo } from "react";
 import { Client } from "@stomp/stompjs";
 import SockJS from "sockjs-client";
 import { toast } from "react-toastify";
@@ -13,7 +13,7 @@ const CONFIG = {
   STABLE_AFTER: 12000,
   TOKEN_REFRESH_SKEW: 90000,
   MAX_ALERTS: 50,
-  MAX_ALERTS_MEMORY: 100,
+  MAX_ALERTS_MEMORY: 200,
 };
 
 export const TOPICS = {
@@ -42,18 +42,24 @@ const genId = () => `${Date.now()}-${Math.random().toString(36).slice(2, 9)}`;
 const tokenApi = () => apiModule.TokenManager || apiModule.tokenManager || null;
 
 const getToken = () => {
-  try { return tokenApi()?.getAccessToken?.() ?? null; } catch { return null; }
+  try {
+    return tokenApi()?.getAccessToken?.() ?? null;
+  } catch {
+    return null;
+  }
 };
 
 const refreshAccessTokenFn = async () => {
   const tm = tokenApi();
-  const fn = apiModule.refreshAccessToken || apiModule.refreshToken || tm?.refreshAccessToken || tm?.refreshToken || tm?.refresh;
+  const fn = apiModule.refreshAccessToken || apiModule.refreshToken;
   if (typeof fn !== "function") return null;
   try {
-    const newToken = await fn.call(tm);
-    if (typeof newToken === "string" && newToken.length > 10) return newToken;
+    const newToken = await fn();
+    if (typeof newToken === "string" && newToken.length > 20) return newToken;
     return getToken();
-  } catch { return null; }
+  } catch {
+    return null;
+  }
 };
 
 const tokenExpiresInMs = (token) => {
@@ -62,19 +68,32 @@ const tokenExpiresInMs = (token) => {
     if (parts.length !== 3) return Infinity;
     let part = parts[1].replace(/-/g, "+").replace(/_/g, "/");
     part = part.padEnd(Math.ceil(part.length / 4) * 4, "=");
-    const json = decodeURIComponent(atob(part).split("").map((c) => `%${c.charCodeAt(0).toString(16).padStart(2, "0")}`).join(""));
+    const json = decodeURIComponent(
+      atob(part)
+        .split("")
+        .map((c) => `%${c.charCodeAt(0).toString(16).padStart(2, "0")}`)
+        .join("")
+    );
     const { exp } = JSON.parse(json);
     return exp ? exp * 1000 - Date.now() : Infinity;
-  } catch { return Infinity; }
+  } catch {
+    return Infinity;
+  }
 };
 
 const httpBase = () => {
-  const raw = apiModule.SOCKJS_BASE || (() => { try { return new URL(apiModule.API_BASE_URL || "", window.location.origin).origin; } catch { return window.location.origin; } })();
+  const raw = apiModule.SOCKJS_BASE || apiModule.API_ORIGIN || (() => {
+    try {
+      return new URL(apiModule.API_BASE_URL || "", window.location.origin).origin;
+    } catch {
+      return window.location.origin;
+    }
+  })();
   return String(raw).replace(/^ws/i, "http").replace(/\/+$/, "");
 };
 
 const sockJsUrl = () => `${httpBase()}/ws`;
-const brokerUrl = () => apiModule.WS_URL || `${httpBase().replace(/^http/i, "ws")}/ws`;
+const brokerUrl = () => apiModule.wsConfig?.getWsUrl?.() || apiModule.WS_URL || `${httpBase().replace(/^http/i, "ws")}/ws`;
 
 const isValidAlert = (data) => {
   if (!data || typeof data !== "object") return false;
@@ -84,10 +103,11 @@ const isValidAlert = (data) => {
 
 const sanitizeAlert = (raw) => {
   if (!raw || typeof raw !== "object") return { message: String(raw ?? ""), severity: "info" };
-  const allowed = ["id", "title", "message", "description", "severity", "type", "timestamp", "createdAt", "action", "link", "providerId", "bookingId"];
+  const allowed = ["id", "title", "message", "description", "severity", "type", "timestamp", "createdAt", "action", "link", "providerId", "bookingId", "data"];
   const out = {};
-  for (const k of allowed) if (raw[k] !== undefined) out[k] = String(raw[k]).slice(0, 500);
-  if (raw.severity) out.severity = String(raw.severity).toLowerCase().slice(0, 20);
+  for (const k of allowed) if (raw[k] !== undefined) out[k] = typeof raw[k] === "string" ? raw[k].slice(0, 500) : raw[k];
+  if (out.severity) out.severity = String(out.severity).toLowerCase().slice(0, 20);
+  if (out.type) out.type = String(out.type).toLowerCase().slice(0, 20);
   return out;
 };
 
@@ -131,42 +151,63 @@ export default function useAdminDashboardSocket(options = {}) {
   const optsRef = useRef({});
   optsRef.current = { enableRealTime, autoConnect, maxAlerts, onAlert, onStatsUpdate, onConnectionChange, appHeartbeat, debug };
 
-  const log = useCallback((...a) => { if (optsRef.current.debug) console.log("[AdminSocket v67]", ...a); }, []);
+  const log = useCallback((...a) => {
+    if (optsRef.current.debug) console.log("[AdminSocket v67]", ...a);
+  }, []);
 
   const transition = useCallback((state, err = null) => {
     stateRef.current = state;
     if (!mountedRef.current) return;
     setConnectionState(state);
     setIsConnected(state === CONNECTION_STATE.CONNECTED);
-    setIsConnecting(state === CONNECTION_STATE.CONNECTING);
+    setIsConnecting(state === CONNECTION_STATE.CONNECTING || state === CONNECTION_STATE.RECONNECTING);
     setError(err);
     optsRef.current.onConnectionChange?.({ connected: state === CONNECTION_STATE.CONNECTED, state, error: err });
   }, []);
 
   const clearTimers = useCallback(() => {
-    [reconnectTimerRef, connectTimerRef, stableTimerRef].forEach((r) => { clearTimeout(r.current); r.current = null; });
-    clearInterval(heartbeatTimerRef.current);
-    heartbeatTimerRef.current = null;
+    [reconnectTimerRef, connectTimerRef, stableTimerRef].forEach((r) => {
+      if (r.current) {
+        clearTimeout(r.current);
+        r.current = null;
+      }
+    });
+    if (heartbeatTimerRef.current) {
+      clearInterval(heartbeatTimerRef.current);
+      heartbeatTimerRef.current = null;
+    }
   }, []);
 
   const teardown = useCallback((client) => {
-    subsRef.current.forEach((s) => { try { s.unsubscribe(); } catch {} });
+    subsRef.current.forEach((s) => {
+      try {
+        s.unsubscribe();
+      } catch {}
+    });
     subsRef.current.clear();
     if (!client) return;
-    client.onConnect = null;
-    client.onStompError = null;
-    client.onWebSocketClose = null;
-    client.onWebSocketError = null;
-    Promise.resolve().then(() => { try { client.deactivate(); } catch {} }).catch(() => {});
+    try {
+      client.onConnect = null;
+      client.onStompError = null;
+      client.onWebSocketClose = null;
+      client.onWebSocketError = null;
+    } catch {}
+    Promise.resolve()
+      .then(() => {
+        try {
+          client.deactivate();
+        } catch {}
+      })
+      .catch(() => {});
   }, []);
 
   const handleAlert = useCallback((raw) => {
     if (!mountedRef.current) return;
     if (!isValidAlert(raw)) return;
     const data = sanitizeAlert(raw);
-    if (data.id && lastAlertIdsRef.current.has(data.id)) return;
+    if (data.id && lastAlertIdsRef.current.has(String(data.id))) return;
     if (data.id) {
-      lastAlertIdsRef.current.add(data.id);
+      lastAlertIdsRef.current.add(String(data.id));
       if (lastAlertIdsRef.current.size > CONFIG.MAX_ALERTS_MEMORY) {
         const first = lastAlertIdsRef.current.values().next().value;
         lastAlertIdsRef.current.delete(first);
@@ -174,12 +215,13 @@ export default function useAdminDashboardSocket(options = {}) {
     }
     const alert = { id: data.id || genId(), timestamp: new Date().toISOString(), read: false, ...data };
     setAlerts((prev) => {
-      if (prev.some((a) => a.id === alert.id)) return prev;
+      if (prev.some((a) => String(a.id) === String(alert.id))) return prev;
       return [alert, ...prev].slice(0, optsRef.current.maxAlerts);
     });
     setLastUpdated(new Date());
     optsRef.current.onAlert?.(alert);
-    if (String(data.severity).toLowerCase() === "critical" || String(data.type).toLowerCase() === "critical") {
+    const sev = String(data.severity || data.type || "").toLowerCase();
+    if (sev === "critical") {
       toast.error(`Critical: ${data.title || data.message || "Alert"}`, { autoClose: false, toastId: `crit-${alert.id}` });
     }
   }, []);
@@ -190,6 +232,7 @@ export default function useAdminDashboardSocket(options = {}) {
       setLastUpdated(new Date());
       optsRef.current.onStatsUpdate?.(d);
     };
+
     [
       { topic: TOPICS.ADMIN_DASHBOARD, handler: onStats },
       { topic: TOPICS.ADMIN_STATS, handler: onStats },
@@ -200,19 +243,24 @@ export default function useAdminDashboardSocket(options = {}) {
           try {
             const body = msg.body ? JSON.parse(msg.body) : null;
             if (body) handler(body);
-          } catch (e) { log(`Bad payload on ${topic}`, e?.message?.slice(0, 100)); }
+          } catch (e) {
+            log(`Bad payload on ${topic}`, e?.message?.slice(0, 100));
+          }
         });
         subsRef.current.set(topic, sub);
         log("Subscribed", topic);
-      } catch (e) { console.error(`[AdminSocket] subscribe ${topic} failed`, e?.message); }
+      } catch (e) {
+        log(`subscribe ${topic} failed`, e?.message);
+      }
     });
   }, [handleAlert, log]);
 
   const scheduleReconnect = useCallback(() => {
     if (!mountedRef.current || !shouldRunRef.current || !optsRef.current.enableRealTime) return;
-    clearTimeout(reconnectTimerRef.current);
+    if (reconnectTimerRef.current) clearTimeout(reconnectTimerRef.current);
     if (typeof navigator !== "undefined" && navigator.onLine === false) {
       transition(CONNECTION_STATE.RECONNECTING, "Offline - live resumes on reconnect");
+      reconnectTimerRef.current = setTimeout(() => connectRef.current?.(), 5000);
       return;
     }
     if (attemptRef.current >= CONFIG.MAX_RECONNECT_ATTEMPTS) {
@@ -232,7 +280,10 @@ export default function useAdminDashboardSocket(options = {}) {
     if (!mountedRef.current || !shouldRunRef.current || !optsRef.current.enableRealTime) return;
     if (connectingRef.current || clientRef.current?.connected) return;
     connectingRef.current = true;
-    clearTimeout(reconnectTimerRef.current);
+    if (reconnectTimerRef.current) {
+      clearTimeout(reconnectTimerRef.current);
+      reconnectTimerRef.current = null;
+    }
 
     let token = getToken();
     if (!token) {
@@ -240,11 +291,15 @@ export default function useAdminDashboardSocket(options = {}) {
       transition(CONNECTION_STATE.AUTH_ERROR, "Sign in required for live");
       return;
     }
+
     transition(CONNECTION_STATE.CONNECTING);
 
     if (tokenExpiresInMs(token) < CONFIG.TOKEN_REFRESH_SKEW) {
       const fresh = await refreshAccessTokenFn();
-      if (!mountedRef.current || !shouldRunRef.current) { connectingRef.current = false; return; }
+      if (!mountedRef.current || !shouldRunRef.current) {
+        connectingRef.current = false;
+        return;
+      }
       if (fresh) token = fresh;
       if (tokenExpiresInMs(token) <= 0) {
         connectingRef.current = false;
@@ -257,14 +312,23 @@ export default function useAdminDashboardSocket(options = {}) {
     const gen = ++generationRef.current;
     const isCurrent = () => mountedRef.current && gen === generationRef.current;
     let lost = false;
-    let client;
+    let client = null;
 
     const lose = ({ auth = false, message = "Connection lost" } = {}) => {
       if (lost || !isCurrent()) return;
       lost = true;
-      clearTimeout(connectTimerRef.current);
-      clearTimeout(stableTimerRef.current);
-      clearInterval(heartbeatTimerRef.current);
+      if (connectTimerRef.current) {
+        clearTimeout(connectTimerRef.current);
+        connectTimerRef.current = null;
+      }
+      if (stableTimerRef.current) {
+        clearTimeout(stableTimerRef.current);
+        stableTimerRef.current = null;
+      }
+      if (heartbeatTimerRef.current) {
+        clearInterval(heartbeatTimerRef.current);
+        heartbeatTimerRef.current = null;
+      }
       connectingRef.current = false;
       wasLostRef.current = true;
       teardown(client);
@@ -278,7 +342,9 @@ export default function useAdminDashboardSocket(options = {}) {
         }
         authRetriedRef.current = true;
         transition(CONNECTION_STATE.RECONNECTING, "Refreshing session...");
-        refreshAccessTokenFn().finally(() => { if (mountedRef.current && shouldRunRef.current) scheduleReconnect(); });
+        refreshAccessTokenFn().finally(() => {
+          if (mountedRef.current && shouldRunRef.current) scheduleReconnect();
+        });
         return;
       }
       transition(CONNECTION_STATE.ERROR, message);
@@ -286,18 +352,37 @@ export default function useAdminDashboardSocket(options = {}) {
     };
 
     try {
-      client = new Client({
-        ...(USE_NATIVE_WS ? { brokerURL: brokerUrl() } : { webSocketFactory: () => new SockJS(sockJsUrl()) }),
-        connectHeaders: { Authorization: `Bearer ${token}`, "X-Client-Type": "admin-dashboard-v67", "X-Request-ID": genId() },
+      const clientConfig = {
+        connectHeaders: {
+          Authorization: `Bearer ${token}`,
+          "X-Client-Type": "admin-dashboard-v67",
+          "X-Request-ID": genId(),
+        },
         reconnectDelay: 0,
         heartbeatIncoming: CONFIG.HEARTBEAT,
         heartbeatOutgoing: CONFIG.HEARTBEAT,
         debug: () => {},
-      });
+        onWebSocketClose: (evt) => {
+          const reason = evt?.reason || (evt?.code ? `Close code ${evt.code}` : "Connection closed");
+          lose({ message: reason });
+        },
+        onWebSocketError: () => lose({ message: "Cannot reach realtime server" }),
+      };
+
+      if (USE_NATIVE_WS) {
+        clientConfig.brokerURL = brokerUrl();
+      } else {
+        clientConfig.webSocketFactory = () => new SockJS(sockJsUrl());
+      }
+
+      client = new Client(clientConfig);
 
       client.onConnect = () => {
         if (!isCurrent() || lost) return;
-        clearTimeout(connectTimerRef.current);
+        if (connectTimerRef.current) {
+          clearTimeout(connectTimerRef.current);
+          connectTimerRef.current = null;
+        }
         connectingRef.current = false;
         const recovered = wasLostRef.current;
         wasLostRef.current = false;
@@ -305,41 +390,39 @@ export default function useAdminDashboardSocket(options = {}) {
         setLastUpdated(new Date());
         log("Connected v67");
         subscribe(client);
-        clearTimeout(stableTimerRef.current);
+        if (stableTimerRef.current) clearTimeout(stableTimerRef.current);
         stableTimerRef.current = setTimeout(() => {
           attemptRef.current = 0;
           authRetriedRef.current = false;
           if (mountedRef.current) setReconnectAttempt(0);
         }, CONFIG.STABLE_AFTER);
+
         if (optsRef.current.appHeartbeat) {
-          clearInterval(heartbeatTimerRef.current);
+          if (heartbeatTimerRef.current) clearInterval(heartbeatTimerRef.current);
           heartbeatTimerRef.current = setInterval(() => {
             if (!client.connected) return;
-            try { client.publish({ destination: "/app/heartbeat", body: JSON.stringify({ ts: Date.now(), gen }) }); } catch {}
+            try {
+              client.publish({ destination: "/app/heartbeat", body: JSON.stringify({ ts: Date.now(), gen }) });
+            } catch {}
           }, CONFIG.HEARTBEAT);
         }
+
         if (recovered) toast.success("Live restored", { autoClose: 2000, toastId: "ws-ok" });
       };
 
       client.onStompError = (frame) => {
-        const detail = `${frame?.headers?.message || ""} ${frame?.body || ""}`.slice(0, 500);
-        const channelFailure = /clientInboundChannel|Failed to send message/i.test(detail);
-        const authFailure = channelFailure || /auth|jwt|token|unauthori[sz]ed|forbidden|denied|expired|credentials/i.test(detail);
-        console.error("[AdminSocket v67] STOMP error:", (frame?.headers?.message || "unknown").slice(0, 200));
+        const detail = `${frame?.headers?.message || ""} ${frame?.body || ""}`.slice(0, 800);
+        const channelFailure = /clientInboundChannel|Failed to send message|ExecutorSubscribableChannel/i.test(detail);
+        const authFailure = channelFailure || /auth|jwt|token|unauthori[sz]ed|forbidden|denied|expired|credentials|access denied/i.test(detail);
+        log("STOMP error:", (frame?.headers?.message || "unknown").slice(0, 200));
         lose({ auth: authFailure, message: frame?.headers?.message || "Realtime error" });
       };
-
-      client.onWebSocketClose = (evt) => {
-        const reason = evt?.reason || evt?.code ? `Close code ${evt.code}` : "Connection closed";
-        lose({ message: reason });
-      };
-      client.onWebSocketError = () => lose({ message: "Cannot reach realtime server" });
 
       clientRef.current = client;
       connectTimerRef.current = setTimeout(() => lose({ message: "Connection timed out" }), CONFIG.CONNECT_TIMEOUT);
       client.activate();
     } catch (e) {
-      console.error("[AdminSocket v67] create failed", e?.message);
+      log("create failed", e?.message);
       lose({ message: e?.message || "Could not start realtime" });
     }
   }, [transition, subscribe, scheduleReconnect, teardown, log]);
@@ -393,7 +476,7 @@ export default function useAdminDashboardSocket(options = {}) {
       startTimer = setTimeout(() => connectRef.current?.(), 300);
     }
     return () => {
-      clearTimeout(startTimer);
+      if (startTimer) clearTimeout(startTimer);
       mountedRef.current = false;
       shutdown();
     };
@@ -409,8 +492,11 @@ export default function useAdminDashboardSocket(options = {}) {
       authRetriedRef.current = false;
       connectRef.current?.();
     };
+
     const onOnline = () => kick();
-    const onVisible = () => { if (document.visibilityState === "visible") kick(); };
+    const onVisible = () => {
+      if (document.visibilityState === "visible") kick();
+    };
     const onTokenEvent = () => kick({ force: true });
     const onLogout = () => disconnect();
 
@@ -420,6 +506,7 @@ export default function useAdminDashboardSocket(options = {}) {
     window.addEventListener("auth:login", onTokenEvent);
     window.addEventListener("auth:logout", onLogout);
     window.addEventListener("auth:expired", onLogout);
+
     return () => {
       window.removeEventListener("online", onOnline);
       document.removeEventListener("visibilitychange", onVisible);
@@ -431,9 +518,19 @@ export default function useAdminDashboardSocket(options = {}) {
   }, [disconnect]);
 
   const unreadCount = useMemo(() => alerts.filter((a) => !a.read).length, [alerts]);
-  const markAlertAsRead = useCallback((id) => setAlerts((p) => p.map((a) => (a.id === id ? { ...a, read: true } : a))), []);
-  const markAllAlertsAsRead = useCallback(() => setAlerts((p) => p.map((a) => ({ ...a, read: true }))), []);
-  const clearAlerts = useCallback(() => { setAlerts([]); lastAlertIdsRef.current.clear(); }, []);
+
+  const markAlertAsRead = useCallback((id) => {
+    setAlerts((p) => p.map((a) => (String(a.id) === String(id) ? { ...a, read: true } : a)));
+  }, []);
+
+  const markAllAlertsAsRead = useCallback(() => {
+    setAlerts((p) => p.map((a) => ({ ...a, read: true })));
+  }, []);
+
+  const clearAlerts = useCallback(() => {
+    setAlerts([]);
+    lastAlertIdsRef.current.clear();
+  }, []);
 
   return {
     connected: isConnected,

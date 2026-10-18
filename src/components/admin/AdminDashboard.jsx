@@ -1,4 +1,4 @@
-// src/components/admin/AdminDashboard.jsx
+// src/components/admin/AdminDashboard.jsx - FIX v64 FINAL - .map is not a function 100% safe
 import React, { useState, useEffect, useCallback, useMemo, useRef, useId } from "react";
 import { useNavigate, useLocation } from "react-router-dom";
 import { useAuth } from "../../contexts/AuthContext";
@@ -45,7 +45,7 @@ const STATUS_COLORS = {
   COMPLETED: COLORS.success, CANCELLED: COLORS.danger, REJECTED: COLORS.danger, REFUNDED: COLORS.muted,
 };
 
-/* ============================== Helpers ============================== */
+/* ============================== Helpers - FIX v64 SAFE ============================== */
 
 const isCanceled = (e) => e?.name === "CanceledError" || e?.name === "AbortError" || e?.code === "ERR_CANCELED";
 const normalizeRole = (r) => String(r || "").toUpperCase().replace(/^ROLE_/, "");
@@ -60,13 +60,55 @@ const safeDistance = (value) => {
   return Number.isNaN(d.getTime()) ? "" : formatDistanceToNow(d, { addSuffix: true });
 };
 
-// Accepts [..], {data:[..]}, {content:[..]}, {data:{content:[..]}} and similar wrappers.
+// FIX v64: ULTRA SAFE - handles axios response, {data:[]}, {data:{content:[]}}, {data:{data:[]}}, paginated, etc - NEVER returns non-array
 const toArray = (payload, depth = 0) => {
+  if (payload == null) return [];
   if (Array.isArray(payload)) return payload;
-  if (!payload || typeof payload !== "object" || depth > 3) return [];
-  const inner = payload.data ?? payload.content ?? payload.items ?? payload.results ?? payload.records;
-  return inner === undefined ? [] : toArray(inner, depth + 1);
+  if (typeof payload !== "object" || depth > 5) return [];
+  
+  // Axios response: response.data may be array or object
+  if (payload.data !== undefined) {
+    if (Array.isArray(payload.data)) return payload.data;
+    // data is object - drill down
+    const inner = payload.data;
+    if (inner && typeof inner === "object") {
+      if (Array.isArray(inner)) return inner;
+      // Check for nested wrappers inside data
+      const nested = inner.data ?? inner.content ?? inner.items ?? inner.results ?? inner.records ?? inner.list ?? inner.rows ?? inner.bookings ?? inner.providers ?? inner.activities;
+      if (Array.isArray(nested)) return nested;
+      if (nested && typeof nested === "object") {
+        const deepResult = toArray(nested, depth + 1);
+        if (deepResult.length > 0) return deepResult;
+      }
+      // If inner has data property that is object, recurse
+      if (inner.data && typeof inner.data === "object") {
+        const rr = toArray(inner.data, depth + 1);
+        if (rr.length > 0) return rr;
+      }
+      // Fallback: if inner itself looks like paginated object but we found nothing, return []
+    }
+  }
+  
+  // Direct wrappers without .data
+  const direct = payload.content ?? payload.items ?? payload.results ?? payload.records ?? payload.list ?? payload.rows ?? payload.bookings ?? payload.providers ?? payload.activities;
+  if (Array.isArray(direct)) return direct;
+  if (direct && typeof direct === "object") {
+    const r = toArray(direct, depth + 1);
+    if (r.length > 0) return r;
+  }
+  
+  // Last resort: if object has numeric keys or looks like array-like, try Object.values
+  // But only if it doesn't look like a stats object
+  const keys = Object.keys(payload);
+  const isStatsLike = keys.some(k => ["totalUsers","totalProviders","totalBookings","totalRevenue"].includes(k));
+  if (!isStatsLike && keys.length > 0 && keys.every(k => !isNaN(Number(k)))) {
+    return Object.values(payload);
+  }
+  
+  return [];
 };
+
+const safeArray = toArray;
 
 const STAT_KEYS = [
   "totalUsers", "activeUsers", "newUsersToday", "userGrowthRate", "totalProviders", "pendingProviders",
@@ -74,8 +116,13 @@ const STAT_KEYS = [
 ];
 const normalizeStats = (raw) => {
   let d = raw;
-  for (let i = 0; i < 3 && d && typeof d === "object" && !Array.isArray(d) && d.totalUsers == null && d.data && typeof d.data === "object"; i += 1) d = d.data;
+  for (let i = 0; i < 5 && d && typeof d === "object" && !Array.isArray(d) && d.totalUsers == null; i += 1) {
+    if (d.data && typeof d.data === "object") d = d.data;
+    else if (d.dashboardStats) d = d.dashboardStats;
+    else break;
+  }
   d = d?.dashboardStats || d || {};
+  if (Array.isArray(d)) d = d[0] || {};
   return Object.fromEntries(STAT_KEYS.map((k) => [k, num(d[k])]));
 };
 
@@ -83,10 +130,15 @@ const labelFromDate = (value) => {
   const d = new Date(value);
   return Number.isNaN(d.getTime()) ? null : d.toLocaleDateString("en-IN", { day: "2-digit", month: "short" });
 };
-const mapSeries = (raw) => toArray(raw).map((it, i) => ({
-  name: it.label || it.name || (it.date && labelFromDate(it.date)) || `#${i + 1}`,
-  value: num(it.value ?? it.amount ?? it.revenue ?? it.total ?? it.count),
-}));
+
+const mapSeries = (raw) => {
+  const arr = safeArray(raw);
+  if (!Array.isArray(arr) || arr.length === 0) return [];
+  return arr.map((it, i) => ({
+    name: it?.label || it?.name || (it?.date && labelFromDate(it.date)) || `#${i + 1}`,
+    value: num(it?.value ?? it?.amount ?? it?.revenue ?? it?.total ?? it?.count),
+  }));
+};
 
 const colorByName = (() => {
   const map = new Map();
@@ -96,41 +148,58 @@ const colorByName = (() => {
     return map.get(key);
   };
 })();
-const mapDistribution = (raw) => toArray(raw).map((i) => {
-  const name = i.label || i.name || "Unknown";
-  return { name, value: num(i.count ?? i.value), color: i.color || colorByName(name) };
-});
 
-const mapBookings = (raw) => toArray(raw).map((b, i) => ({
-  key: b.id ?? b.bookingId ?? `row-${i}`,
-  id: b.id ?? b.bookingId ?? null,
-  customer: b.customerName || b.customer?.name || b.customer?.fullName || "Unknown",
-  service: b.serviceType || b.service?.name || b.service || "—",
-  amount: num(b.totalAmount ?? b.amount),
-  status: String(b.status || "PENDING").toUpperCase(),
-  createdAt: b.createdAt || b.bookingDate || b.timestamp || null,
-}));
+const mapDistribution = (raw) => {
+  const arr = safeArray(raw);
+  if (!Array.isArray(arr) || arr.length === 0) return [];
+  return arr.map((i) => {
+    const name = i?.label || i?.name || "Unknown";
+    return { name, value: num(i?.count ?? i?.value), color: i?.color || colorByName(name) };
+  });
+};
 
-const mapTopProviders = (raw) => toArray(raw).map((p, i) => ({
-  key: p.id ?? p.providerId ?? `prov-${i}`,
-  id: p.id ?? p.providerId ?? null,
-  name: p.name || p.fullName || p.providerName || "Provider",
-  rating: num(p.rating ?? p.averageRating),
-  jobs: num(p.completedBookings ?? p.totalBookings ?? p.bookings ?? p.jobs),
-  revenue: num(p.revenue ?? p.earnings ?? p.totalEarnings),
-}));
+const mapBookings = (raw) => {
+  const arr = safeArray(raw);
+  if (!Array.isArray(arr) || arr.length === 0) return [];
+  return arr.map((b, i) => ({
+    key: b?.id ?? b?.bookingId ?? `row-${i}`,
+    id: b?.id ?? b?.bookingId ?? null,
+    customer: b?.customerName || b?.customer?.name || b?.customer?.fullName || "Unknown",
+    service: b?.serviceType || b?.service?.name || b?.service || "—",
+    amount: num(b?.totalAmount ?? b?.amount),
+    status: String(b?.status || "PENDING").toUpperCase(),
+    createdAt: b?.createdAt || b?.bookingDate || b?.timestamp || null,
+  }));
+};
 
-const mapActivities = (raw) => toArray(raw).map((a, i) => ({
-  key: a.id ?? `act-${i}`,
-  text: a.title || a.message || a.description || a.action || "Activity",
-  at: a.timestamp || a.createdAt || a.time || null,
-  type: String(a.type || a.severity || "info").toLowerCase(),
-}));
+const mapTopProviders = (raw) => {
+  const arr = safeArray(raw);
+  if (!Array.isArray(arr) || arr.length === 0) return [];
+  return arr.map((p, i) => ({
+    key: p?.id ?? p?.providerId ?? `prov-${i}`,
+    id: p?.id ?? p?.providerId ?? null,
+    name: p?.name || p?.fullName || p?.providerName || "Provider",
+    rating: num(p?.rating ?? p?.averageRating),
+    jobs: num(p?.completedBookings ?? p?.totalBookings ?? p?.bookings ?? p?.jobs),
+    revenue: num(p?.revenue ?? p?.earnings ?? p?.totalEarnings),
+  }));
+};
+
+const mapActivities = (raw) => {
+  const arr = safeArray(raw);
+  if (!Array.isArray(arr) || arr.length === 0) return [];
+  return arr.map((a, i) => ({
+    key: a?.id ?? `act-${i}`,
+    text: a?.title || a?.message || a?.description || a?.action || "Activity",
+    at: a?.timestamp || a?.createdAt || a?.time || null,
+    type: String(a?.type || a?.severity || "info").toLowerCase(),
+  }));
+};
 
 const normAlert = (a) => ({
   ...a,
-  _key: a.id ?? `${a.timestamp || ""}|${a.title || a.message || ""}`,
-  _color: { error: COLORS.danger, critical: COLORS.danger, warning: COLORS.warning, success: COLORS.success }[String(a.severity || a.type || "").toLowerCase()] || COLORS.info,
+  _key: a?.id ?? `${a?.timestamp || ""}|${a?.title || a?.message || ""}|${Math.random()}`,
+  _color: { error: COLORS.danger, critical: COLORS.danger, warning: COLORS.warning, success: COLORS.success }[String(a?.severity || a?.type || "").toLowerCase()] || COLORS.info,
 });
 
 // Optional endpoints: if adminService does not implement them yet, the panel hides itself.
@@ -263,12 +332,13 @@ const EmptyState = ({ text, minHeight = 200 }) => (
 
 const MetricChart = React.memo(function MetricChart({ data, type = "area", height = 260, color = COLORS.primary, currency = false }) {
   const gid = useId().replace(/:/g, "");
-  if (!data?.length) return <EmptyState text="No data for this period" minHeight={height} />;
+  const safeData = Array.isArray(data) ? data : [];
+  if (!safeData?.length) return <EmptyState text="No data for this period" minHeight={height} />;
   const fmt = (v) => (currency ? fmtINR(v) : fmtNum(v));
   return (
     <ResponsiveContainer width="100%" height={height}>
       {type === "area" ? (
-        <AreaChart data={data} margin={{ left: 0, right: 8, top: 8 }}>
+        <AreaChart data={safeData} margin={{ left: 0, right: 8, top: 8 }}>
           <defs>
             <linearGradient id={`g-${gid}`} x1="0" y1="0" x2="0" y2="1">
               <stop offset="5%" stopColor={color} stopOpacity={0.25} /><stop offset="95%" stopColor={color} stopOpacity={0} />
@@ -281,7 +351,7 @@ const MetricChart = React.memo(function MetricChart({ data, type = "area", heigh
           <Area type="monotone" dataKey="value" stroke={color} strokeWidth={2} fill={`url(#g-${gid})`} />
         </AreaChart>
       ) : (
-        <BarChart data={data} margin={{ left: 0, right: 8, top: 8 }}>
+        <BarChart data={safeData} margin={{ left: 0, right: 8, top: 8 }}>
           <CartesianGrid strokeDasharray="3 3" stroke={COLORS.borderLight} vertical={false} />
           <XAxis dataKey="name" tick={{ fontSize: 10 }} interval="preserveStartEnd" />
           <YAxis tick={{ fontSize: 10 }} tickFormatter={fmtCompact} width={44} />
@@ -386,7 +456,9 @@ export default function AdminDashboard() {
       try {
         const raw = await cfg.fetch(controller.signal, paramsRef.current);
         if (stale() || genRef.current[key] !== gens[key]) return { key, skipped: true };
-        setData((p) => ({ ...p, [key]: cfg.map(raw) }));
+        const mapped = cfg.map(raw);
+        const safeMapped = Array.isArray(mapped) ? mapped : (mapped && typeof mapped === 'object' && !Array.isArray(mapped) ? mapped : []);
+        setData((p) => ({ ...p, [key]: safeMapped }));
         setStatus((p) => ({ ...p, [key]: { state: "ready" } }));
         return { key, ok: true };
       } catch (err) {
@@ -439,9 +511,12 @@ export default function AdminDashboard() {
       setData((p) => ({ ...p, stats: normalizeStats(s) }));
       setStatus((p) => ({ ...p, stats: { state: "ready" } }));
     }
-    if (d?.revenueTrend && paramsRef.current.days === 7) {
-      setData((p) => ({ ...p, revenue: mapSeries(d.revenueTrend) }));
-      setStatus((p) => ({ ...p, revenue: { state: "ready" } }));
+    if (d?.revenueTrend) {
+      const arr = safeArray(d.revenueTrend);
+      if (paramsRef.current.days === 7 && arr.length) {
+        setData((p) => ({ ...p, revenue: mapSeries(d.revenueTrend) }));
+        setStatus((p) => ({ ...p, revenue: { state: "ready" } }));
+      }
     }
     setLastUpdateTime(new Date());
   }, []);
@@ -500,10 +575,11 @@ export default function AdminDashboard() {
   const stats = data.stats;
   const filteredBookings = useMemo(() => {
     const q = searchQuery.trim().toLowerCase();
-    if (!q) return data.bookings;
-    return data.bookings.filter((b) => [b.id, b.customer, b.service, b.status].some((v) => v != null && String(v).toLowerCase().includes(q)));
+    if (!q) return Array.isArray(data.bookings) ? data.bookings : [];
+    const bookingsArr = Array.isArray(data.bookings) ? data.bookings : [];
+    return bookingsArr.filter((b) => [b.id, b.customer, b.service, b.status].some((v) => v != null && String(v).toLowerCase().includes(q)));
   }, [data.bookings, searchQuery]);
-  const pieData = useMemo(() => data.providers.filter((d) => d.value > 0), [data.providers]);
+  const pieData = useMemo(() => Array.isArray(data.providers) ? data.providers.filter((d) => d.value > 0) : [], [data.providers]);
   const pieTotal = useMemo(() => pieData.reduce((s, d) => s + d.value, 0), [pieData]);
   const unreadCount = useMemo(() => alerts.filter((a) => !readKeys.has(a._key)).length, [alerts, readKeys]);
   const updatedLabel = safeDistance(lastUpdated) || safeDistance(lastUpdateTime) || "just now";
@@ -522,14 +598,16 @@ export default function AdminDashboard() {
       files += 1;
     }
     if (exportChoices.bookings) {
+      const bookingsArr = Array.isArray(data.bookings) ? data.bookings : [];
       downloadCsv(`quickks-bookings-${stamp}.csv`, [
         ["ID", "Customer", "Service", "Amount (INR)", "Status", "Created"],
-        ...data.bookings.map((b) => [b.id ?? "", b.customer, b.service, b.amount, b.status, b.createdAt ?? ""]),
+        ...bookingsArr.map((b) => [b.id ?? "", b.customer, b.service, b.amount, b.status, b.createdAt ?? ""]),
       ]);
       files += 1;
     }
     if (exportChoices.revenue) {
-      downloadCsv(`quickks-revenue-${range}d-${stamp}.csv`, [["Period", "Revenue (INR)"], ...data.revenue.map((r) => [r.name, r.value])]);
+      const revenueArr = Array.isArray(data.revenue) ? data.revenue : [];
+      downloadCsv(`quickks-revenue-${range}d-${stamp}.csv`, [["Period", "Revenue (INR)"], ...revenueArr.map((r) => [r.name, r.value])]);
       files += 1;
     }
     if (files) toast.success(`Exported ${files} file${files > 1 ? "s" : ""}`);

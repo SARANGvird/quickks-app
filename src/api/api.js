@@ -30,7 +30,7 @@ const normalizeApiBase = (raw) => {
 
 export const API_BASE_URL = normalizeApiBase(RAW_API_DEDUPED);
 export const API_ORIGIN = API_BASE_URL.replace(/\/api\/v1\/?$/i, "").replace(/\/+$/, "") || "https://api.quickks.in";
-export const WS_URL = clean(env.VITE_WS_URL) || `${API_ORIGIN.replace(/^http/i, "ws").replace(/^ws:/i, "wss:").replace(/\/+$/, "")}/ws`;
+export const WS_URL = clean(env.VITE_WS_URL) || `${API_ORIGIN}/ws`;
 export const SOCKJS_BASE = API_ORIGIN;
 
 const KEYS = {
@@ -45,26 +45,12 @@ const KEYS = {
 };
 
 const safeGet = (k) => {
-  try {
-    return isBrowser ? localStorage.getItem(k) : null;
-  } catch {
-    return null;
-  }
+  try { return isBrowser ? localStorage.getItem(k) : null; } catch { return null; }
 };
-
 const safeSet = (k, v) => {
-  try {
-    if (isBrowser) {
-      v ? localStorage.setItem(k, v) : localStorage.removeItem(k);
-    }
-  } catch {}
+  try { if (isBrowser) v ? localStorage.setItem(k, v) : localStorage.removeItem(k); } catch {}
 };
-
-const safeRemove = (...ks) => {
-  try {
-    ks.forEach((k) => isBrowser && localStorage.removeItem(k));
-  } catch {}
-};
+const safeRemove = (...ks) => { try { ks.forEach((k) => isBrowser && localStorage.removeItem(k)); } catch {} };
 
 const sanitizeUser = (u) => {
   if (!u || typeof u !== "object") return null;
@@ -131,11 +117,7 @@ export const tokenManager = TokenManager;
 const api = axios.create({
   baseURL: API_BASE_URL,
   timeout: 20000,
-  headers: {
-    "Content-Type": "application/json",
-    Accept: "application/json",
-    "X-Requested-With": "XMLHttpRequest",
-  },
+  headers: { "Content-Type": "application/json", Accept: "application/json", "X-Requested-With": "XMLHttpRequest" },
   withCredentials: false,
 });
 
@@ -143,9 +125,7 @@ api.interceptors.request.use((config) => {
   const token = TokenManager.getAccessToken();
   if (token) config.headers.Authorization = `Bearer ${token}`;
   config.headers["X-Request-ID"] = `${Date.now()}-${Math.random().toString(36).slice(2, 8)}`;
-  config.headers["X-Client-Version"] = "v67";
-  config.headers["X-Client-Platform"] = "web";
-  config.headers["X-Device-Id"] = safeGet("deviceId") || "web-client";
+  config.headers["X-Client-Version"] = "v79";
   if (config.url) {
     config.url = config.url.replace(/^\/api\/v1\//i, "/").replace(/^\/quickks\/api\/v1\//i, "/");
     config.url = dedupApiV1(config.url);
@@ -155,7 +135,6 @@ api.interceptors.request.use((config) => {
 
 let refreshPromise = null;
 let failedQueue = [];
-
 const processQueue = (err, token = null) => {
   failedQueue.forEach((p) => (err ? p.reject(err) : p.resolve(token)));
   failedQueue = [];
@@ -173,11 +152,8 @@ export const refreshAccessToken = async () => {
     TokenManager.setTokens(newAccess, newRefresh);
     if (body.user) TokenManager.setUser(body.user);
     return newAccess;
-  } catch {
-    return null;
-  }
+  } catch { return null; }
 };
-
 export const refreshToken = refreshAccessToken;
 
 api.interceptors.response.use(
@@ -187,19 +163,14 @@ api.interceptors.response.use(
     const status = error.response?.status;
     const url = original?.url || "";
     const isAuth = url.includes("/auth/login") || url.includes("/auth/refresh") || url.includes("/auth/register") || url.includes("/auth/send-otp") || url.includes("/auth/verify-otp");
-
     if (status === 401 && !original._retry && !isAuth) {
       if (refreshPromise) {
-        return new Promise((resolve, reject) => {
-          failedQueue.push({ resolve, reject });
-        }).then((t) => {
+        return new Promise((resolve, reject) => { failedQueue.push({ resolve, reject }); }).then((t) => {
           original.headers.Authorization = `Bearer ${t}`;
           return api(original);
         });
       }
-
       original._retry = true;
-
       refreshPromise = (async () => {
         try {
           const rt = TokenManager.getRefreshToken();
@@ -216,24 +187,16 @@ api.interceptors.response.use(
         } catch (e) {
           processQueue(e, null);
           TokenManager.removeTokens();
-          if (isBrowser && !window.location.pathname.includes("/login")) {
-            window.location.href = "/login?expired=true";
-          }
+          if (isBrowser && !window.location.pathname.includes("/login")) window.location.href = "/login?expired=true";
           throw e;
-        } finally {
-          refreshPromise = null;
-        }
+        } finally { refreshPromise = null; }
       })();
-
       try {
         const newToken = await refreshPromise;
         original.headers.Authorization = `Bearer ${newToken}`;
         return api(original);
-      } catch (e) {
-        return Promise.reject(e);
-      }
+      } catch (e) { return Promise.reject(e); }
     }
-
     return Promise.reject(error);
   }
 );
@@ -244,22 +207,38 @@ const extractPayload = (res) => {
   if (!root) return null;
   if (root.data !== undefined) {
     const inner = root.data;
-    if (inner && typeof inner === "object" && inner.data !== undefined) return inner.data;
+    if (inner && typeof inner === "object" && inner.data !== undefined && !Array.isArray(inner)) {
+      if (inner.data !== null && typeof inner.data === "object") return inner.data;
+    }
     return inner;
   }
   return root;
+};
+
+const toChartArray = (payload) => {
+  if (payload == null) return [];
+  if (Array.isArray(payload)) return payload;
+  if (typeof payload === "object") {
+    if (Array.isArray(payload.content)) return payload.content;
+    if (Array.isArray(payload.items)) return payload.items;
+    if (Array.isArray(payload.results)) return payload.results;
+    if (Array.isArray(payload.data)) return payload.data;
+    const entries = Object.entries(payload);
+    if (entries.length > 0 && entries.every(([, v]) => typeof v === "number" || typeof v === "string")) {
+      return entries.map(([name, value]) => ({ name, label: name, value: typeof value === "number" ? value : Number(value) || 0, count: typeof value === "number" ? value : Number(value) || 0 }));
+    }
+    if (entries.length > 0 && typeof entries[0][1] === "object") {
+      return entries.map(([k, v]) => ({ name: k, ...(typeof v === "object" ? v : { value: v }) }));
+    }
+  }
+  return [];
 };
 
 const unwrapArray = (res) => {
   const payload = extractPayload(res);
   if (payload == null) return [];
   if (Array.isArray(payload)) return payload;
-  if (typeof payload === "object") {
-    const arr = payload.content ?? payload.items ?? payload.results ?? payload.records ?? payload.list ?? payload.rows ?? payload.bookings ?? payload.providers ?? payload.activities ?? payload.revenueTrend ?? payload.serviceDemand;
-    if (Array.isArray(arr)) return arr;
-    if (payload.data && Array.isArray(payload.data)) return payload.data;
-  }
-  return [];
+  return toChartArray(payload);
 };
 
 const unwrapObject = (res) => {
@@ -289,39 +268,21 @@ export const checkHealth = async () => {
     try {
       const res2 = await axios.get(`${API_ORIGIN}/actuator/health`, { timeout: 4000, validateStatus: () => true });
       return { online: res2.status < 500, status: res2.status };
-    } catch {
-      return { online: false, status: 0 };
-    }
+    } catch { return { online: false, status: 0 }; }
   }
 };
 
 export const API_ENDPOINTS = {
-  AUTH: {
-    LOGIN: "/auth/login",
-    REGISTER: "/auth/register",
-    SEND_OTP: "/auth/send-otp",
-    VERIFY_OTP: "/auth/verify-otp",
-    REFRESH: "/auth/refresh",
-    ME: "/auth/me",
-    PING: "/auth/ping",
-    LOGOUT: "/auth/logout",
-    FORGOT: "/auth/forgot-password",
-    RESET: "/auth/reset-password",
-  },
-  HOME: {
-    STATS: "/home/stats",
-    FEATURED: "/home/featured-providers",
-    ANNOUNCEMENTS: "/announcements",
-    POPULAR_SERVICES: "/services/popular",
-  },
+  AUTH: { LOGIN: "/auth/login", REGISTER: "/auth/register", SEND_OTP: "/auth/send-otp", VERIFY_OTP: "/auth/verify-otp", REFRESH: "/auth/refresh", ME: "/auth/me", PING: "/auth/ping", LOGOUT: "/auth/logout" },
+  HOME: { STATS: "/home/stats", FEATURED: "/home/featured-providers", ANNOUNCEMENTS: "/announcements", POPULAR_SERVICES: "/services/popular" },
   DASHBOARD: {
     STATS: "/admin/dashboard/stats",
-    REVENUE_TREND: "/admin/dashboard/revenue-trend",
-    PROVIDER_DISTRIBUTION: "/admin/dashboard/provider-distribution",
+    REVENUE_TREND: "/admin/charts/revenue-trend",
+    PROVIDER_DISTRIBUTION: "/admin/charts/provider-distribution",
     RECENT_ACTIVITIES: "/admin/dashboard/recent-activities",
     TOP_PROVIDERS: "/admin/dashboard/top-providers",
     RECENT_BOOKINGS: "/admin/dashboard/recent-bookings",
-    SERVICE_DEMAND: "/admin/dashboard/service-demand",
+    SERVICE_DEMAND: "/admin/charts/service-demand",
   },
 };
 
@@ -333,7 +294,6 @@ export const adminService = {
   getTopProviders: (params, signal) => api.get(API_ENDPOINTS.DASHBOARD.TOP_PROVIDERS, { params, signal }).then(unwrapArray),
   getRecentBookings: (params, signal) => api.get(API_ENDPOINTS.DASHBOARD.RECENT_BOOKINGS, { params, signal }).then(unwrapArray),
   getServiceDemand: (params, signal) => api.get(API_ENDPOINTS.DASHBOARD.SERVICE_DEMAND, { params, signal }).then(unwrapArray),
-  getStats: (signal) => api.get(API_ENDPOINTS.DASHBOARD.STATS, { signal }).then(unwrapObject),
   getProviderDistributionCompat: (signal) => api.get(API_ENDPOINTS.DASHBOARD.PROVIDER_DISTRIBUTION, { signal }).then(unwrapArray),
   getRevenueTrendCompat: (params, signal) => api.get(API_ENDPOINTS.DASHBOARD.REVENUE_TREND, { params, signal }).then(unwrapArray),
   getRecentActivitiesCompat: (params, signal) => api.get(API_ENDPOINTS.DASHBOARD.RECENT_ACTIVITIES, { params, signal }).then(unwrapArray),

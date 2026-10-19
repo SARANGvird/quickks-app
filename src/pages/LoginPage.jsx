@@ -1,4 +1,3 @@
-// src/pages/LoginPage.jsx
 import React, { useEffect, useState, useRef, useCallback, useMemo } from "react";
 import { useNavigate, useLocation, Link } from "react-router-dom";
 import { useAuth } from "../contexts/AuthContext";
@@ -6,21 +5,17 @@ import {
   Box, Typography, TextField, Button, Alert, CircularProgress, InputAdornment,
   IconButton, Divider, Checkbox, FormControlLabel, Stack,
 } from "@mui/material";
-import { Visibility, VisibilityOff, Google, Facebook, Apple } from "@mui/icons-material";
+import { Visibility, VisibilityOff, Google, 【entity-Facebook¦canonical_name=Facebook】, 【entity-Apple¦canonical_name=Apple】 } from "@mui/icons-material";
 import { styled } from "@mui/material/styles";
 import api, { tokenManager } from "../api/api";
 import QuickksLogo from "../assets/quickks-logo.png";
 
 const env = import.meta.env || {};
 
-/* ---------- Config (change here to match your backend / router) ---------- */
-
 const ENDPOINTS = {
-  phoneLogin: "/auth/phone-login",
-  sendOtp: "/auth/send-otp",
+  login: "/auth/login",
 };
 
-// Must match the routes in your App router (same ones HomePage uses).
 const ROLE_ROUTES = {
   ADMIN: "/admin/dashboard",
   SUPER_ADMIN: "/admin/dashboard",
@@ -30,15 +25,16 @@ const ROLE_ROUTES = {
 
 const MAX_ATTEMPTS = 5;
 const LOCK_MS = 5 * 60 * 1000;
-const OTP_SECONDS = 60;
 const REMEMBER_KEY = "rememberMe";
 const LOCK_KEY = "quickks_login_lock";
 const NO_RETURN = ["/login", "/register", "/forgot-password"];
 
-// Optional social login, e.g. VITE_SOCIAL_PROVIDERS="google,facebook,apple".
-// Uses Spring Security's standard /oauth2/authorization/{provider} entry point.
 const SOCIAL_PROVIDERS = (env.VITE_SOCIAL_PROVIDERS || "").split(",").map((s) => s.trim().toLowerCase()).filter(Boolean);
-const SOCIAL_META = { google: { label: "Google", icon: <Google /> }, facebook: { label: "Facebook", icon: <Facebook /> }, apple: { label: "Apple", icon: <Apple /> } };
+const SOCIAL_META = {
+  google: { label: "Google", icon: <Google /> },
+  facebook: { label: "Facebook", icon: <Facebook /> },
+  apple: { label: "Apple", icon: <Apple /> },
+};
 
 const C = {
   header: "#131921", text: "#0F1111", muted: "#565959", link: "#007185", linkHover: "#C7511F",
@@ -47,38 +43,24 @@ const C = {
 };
 const FONT = '"Amazon Ember", "Segoe UI", Arial, sans-serif';
 
-/* ---------- Helpers ---------- */
-
-const logError = (...a) => { console.error("[LoginPage]", ...a); };
-
-const storage = {
-  get(kind, key) { try { return (kind === "session" ? sessionStorage : localStorage).getItem(key); } catch { return null; } },
-  set(kind, key, value) { try { (kind === "session" ? sessionStorage : localStorage).setItem(key, value); } catch { /* ignore */ } },
-  remove(kind, key) { try { (kind === "session" ? sessionStorage : localStorage).removeItem(key); } catch { /* ignore */ } },
-};
-
 const EMAIL_RE = /^[^\s@]+@[^\s@]+\.[^\s@]+$/;
 const PHONE_RE = /^[6-9]\d{9}$/;
 
-// Spring often returns "ROLE_ADMIN"; normalise to ADMIN.
 const normalizeRole = (role) => String(role || "CUSTOMER").toUpperCase().replace(/^ROLE_/, "");
 const routeForRole = (role) => ROLE_ROUTES[normalizeRole(role)] || ROLE_ROUTES.CUSTOMER;
 
-// Only same-app paths; blocks open redirects such as "//evil.com".
 const safeReturnPath = (from) => {
   const p = typeof from === "string" ? from : from?.pathname;
   if (!p || !p.startsWith("/") || p.startsWith("//") || NO_RETURN.includes(p)) return null;
   return `${p}${from?.search || ""}`;
 };
 
-const toPhonePayload = (digits) => (env.VITE_PHONE_E164 === "true" ? `+91${digits}` : digits);
-const maskPhone = (d) => `+91 ${d.slice(0, 2)}••••••${d.slice(-2)}`;
 const fmtClock = (s) => `${Math.floor(s / 60)}:${String(s % 60).padStart(2, "0")}`;
 
-// Never reveal whether the email exists (no user-enumeration), never expose infra details.
-function friendlyError({ status, serverMsg, mode, fallback }) {
+function friendlyError({ status, serverMsg, fallback }) {
   if (!status) return "Cannot reach Quickks. Check your internet connection and try again.";
-  if (status === 401) return mode === "PHONE" ? "Incorrect or expired OTP." : "Incorrect email or password.";
+  if (status === 400) return serverMsg || "Enter a valid email or phone number with password.";
+  if (status === 401) return "Incorrect email/phone or password.";
   if (status === 403) return serverMsg || "This account cannot sign in right now. Please contact support.";
   if (status === 423) return serverMsg || "This account is locked. Reset your password or try again later.";
   if (status === 429) return "Too many attempts. Please wait a few minutes and try again.";
@@ -88,11 +70,9 @@ function friendlyError({ status, serverMsg, mode, fallback }) {
 
 const fromAxios = (err) => ({
   status: err?.response?.status || 0,
-  serverMsg: err?.response?.data?.message,
+  serverMsg: err?.response?.data?.message || err?.response?.data?.error,
   retryAfter: Number(err?.response?.headers?.["retry-after"]) || 0,
 });
-
-/* ---------- Styled primitives ---------- */
 
 const Field = styled(TextField)({
   "& .MuiOutlinedInput-root": {
@@ -121,12 +101,9 @@ const TextButton = styled("button")({
   background: "none", border: "none", padding: 0, color: C.link, cursor: "pointer", fontSize: 13, fontFamily: FONT,
   "&:hover": { textDecoration: "underline", color: C.linkHover },
   "&:focus-visible": { outline: `2px solid ${C.link}`, outlineOffset: 2 },
-  "&:disabled": { color: C.muted, cursor: "default", textDecoration: "none" },
 });
 
 const routerLinkSx = { color: C.link, textDecoration: "none", "&:hover": { textDecoration: "underline", color: C.linkHover } };
-
-/* ---------- Page ---------- */
 
 function LoginPage() {
   const navigate = useNavigate();
@@ -144,34 +121,34 @@ function LoginPage() {
 
   const [mode, setMode] = useState("EMAIL");
   const [email, setEmail] = useState("");
+  const [phone, setPhone] = useState("");
   const [password, setPassword] = useState("");
   const [showPassword, setShowPassword] = useState(false);
-  const [rememberMe, setRememberMe] = useState(() => storage.get("local", REMEMBER_KEY) === "true");
-  const [phone, setPhone] = useState("");
-  const [otp, setOtp] = useState("");
-  const [otpSent, setOtpSent] = useState(false);
-  const [otpTimer, setOtpTimer] = useState(0);
+  const [rememberMe, setRememberMe] = useState(() => {
+    try { return localStorage.getItem(REMEMBER_KEY) === "true"; } catch { return false; }
+  });
   const [error, setError] = useState(null);
   const [info, setInfo] = useState(null);
   const [isLoading, setIsLoading] = useState(false);
   const [serverDown, setServerDown] = useState(false);
   const [failedAttempts, setFailedAttempts] = useState(0);
   const [lockedUntil, setLockedUntil] = useState(() => {
-    const t = Number(storage.get("session", LOCK_KEY)) || 0;
-    return t > Date.now() ? t : 0;
+    try {
+      const t = Number(sessionStorage.getItem(LOCK_KEY)) || 0;
+      return t > Date.now() ? t : 0;
+    } catch { return 0; }
   });
   const [now, setNow] = useState(() => Date.now());
 
   const lockSeconds = lockedUntil > now ? Math.ceil((lockedUntil - now) / 1000) : 0;
   const isLocked = lockSeconds > 0;
 
-  /* Persist "remember me" preference only (never credentials). */
-  useEffect(() => { storage.set("local", REMEMBER_KEY, String(rememberMe)); }, [rememberMe]);
+  useEffect(() => {
+    try { localStorage.setItem(REMEMBER_KEY, String(rememberMe)); } catch {}
+  }, [rememberMe]);
 
-  /* Focus first field when the mode changes. */
   useEffect(() => { firstFieldRef.current?.focus(); }, [mode]);
 
-  /* Already signed in (or just signed in): go to the right dashboard once. */
   useEffect(() => {
     if (isAuthenticated && !redirectedRef.current) {
       redirectedRef.current = true;
@@ -179,7 +156,6 @@ function LoginPage() {
     }
   }, [isAuthenticated, user, returnTo, navigate]);
 
-  /* Lock countdown. */
   useEffect(() => {
     if (!lockedUntil) return undefined;
     const t = setInterval(() => {
@@ -188,20 +164,12 @@ function LoginPage() {
       if (n >= lockedUntil) {
         setLockedUntil(0);
         setFailedAttempts(0);
-        storage.remove("session", LOCK_KEY);
+        try { sessionStorage.removeItem(LOCK_KEY); } catch {}
       }
     }, 1000);
     return () => clearInterval(t);
   }, [lockedUntil]);
 
-  /* OTP resend countdown. */
-  useEffect(() => {
-    if (otpTimer <= 0) return undefined;
-    const t = setTimeout(() => setOtpTimer((p) => p - 1), 1000);
-    return () => clearTimeout(t);
-  }, [otpTimer]);
-
-  /* Reachability check only (no-cors: succeeds if the server answers, fails only on network error). */
   useEffect(() => {
     let unmounted = false;
     const controller = new AbortController();
@@ -218,7 +186,7 @@ function LoginPage() {
     const until = Date.now() + ms;
     setLockedUntil(until);
     setNow(Date.now());
-    storage.set("session", LOCK_KEY, String(until));
+    try { sessionStorage.setItem(LOCK_KEY, String(until)); } catch {}
   }, []);
 
   const registerFailure = useCallback((retryAfterSec = 0) => {
@@ -231,104 +199,103 @@ function LoginPage() {
   }, [startLock]);
 
   const switchMode = (m) => {
-    setMode(m); setError(null); setInfo(null); setOtpSent(false); setOtp(""); setOtpTimer(0);
+    setMode(m);
+    setError(null);
+    setInfo(null);
   };
 
-  const finishLogin = useCallback((role, { hard = false } = {}) => {
+  const finishLogin = useCallback((role, hard = false) => {
     redirectedRef.current = true;
-    storage.remove("session", LOCK_KEY);
+    try { sessionStorage.removeItem(LOCK_KEY); } catch {}
     const target = returnTo || routeForRole(role);
-    // Hard navigation when tokens were written outside AuthContext, so it re-reads storage.
     if (hard) window.location.replace(target);
     else navigate(target, { replace: true });
   }, [returnTo, navigate]);
 
-  /* ----- Phone / OTP ----- */
-
-  const handleSendOtp = useCallback(async () => {
-    if (!PHONE_RE.test(phone)) { setError("Enter a valid 10-digit mobile number."); return; }
-    setIsLoading(true); setError(null); setInfo(null);
-    try {
-      const res = await api.post(ENDPOINTS.sendOtp, { phone: toPhonePayload(phone) });
-      setOtpSent(true); setOtp(""); setOtpTimer(OTP_SECONDS);
-      setInfo(res.data?.message || `OTP sent to ${maskPhone(phone)}`);
-    } catch (err) {
-      const f = fromAxios(err);
-      if (f.status === 429 && f.retryAfter) setOtpTimer(f.retryAfter);
-      logError("send-otp failed", f.status);
-      setError(friendlyError({ ...f, mode: "PHONE", fallback: "Could not send the OTP. Please try again." }));
-    } finally { setIsLoading(false); }
-  }, [phone]);
-
-  // Fallback when AuthContext has no loginWithPhone: store tokens ourselves.
-  const phoneLoginDirect = useCallback(async () => {
-    try {
-      const res = await api.post(ENDPOINTS.phoneLogin, { phone: toPhonePayload(phone), otp });
-      const data = res.data?.data || res.data || {};
-      const token = data.token || data.accessToken;
-      if (!token) return { success: false, status: 401, error: data.message };
-      tokenManager.setTokens(token, data.refreshToken);
-      const userData = { ...data, id: data.userId || data.id, name: data.name || "User", email: data.email || "", role: normalizeRole(data.role), phone };
-      tokenManager.setUser(userData);
-      return { success: true, user: userData, data, direct: true };
-    } catch (err) {
-      const f = fromAxios(err);
-      return { success: false, ...f, error: f.serverMsg };
+  const buildPayload = useCallback(() => {
+    const trimmedEmail = email.trim().toLowerCase();
+    const trimmedPhone = phone.replace(/\D/g, "").slice(0, 10);
+    const trimmedPassword = password.trim();
+    
+    if (mode === "EMAIL") {
+      if (!trimmedEmail || !EMAIL_RE.test(trimmedEmail)) return { error: "Enter a valid email address." };
+      if (!trimmedPassword || trimmedPassword.length < 6) return { error: "Enter your password (minimum 6 characters)." };
+      return { payload: { email: trimmedEmail, phone: null, password: trimmedPassword, rememberMe } };
+    } else {
+      if (!PHONE_RE.test(trimmedPhone)) return { error: "Enter a valid 10-digit mobile number." };
+      if (!trimmedPassword || trimmedPassword.length < 6) return { error: "Enter your password (minimum 6 characters)." };
+      return { payload: { email: null, phone: trimmedPhone, password: trimmedPassword, rememberMe } };
     }
-  }, [phone, otp]);
-
-  /* ----- Submit ----- */
+  }, [mode, email, phone, password, rememberMe]);
 
   const handleSubmit = useCallback(async (e) => {
     e.preventDefault();
     if (isLoading || isLocked) return;
-    setError(null); setInfo(null);
+    setError(null);
+    setInfo(null);
 
-    if (mode === "PHONE" && !otpSent) { handleSendOtp(); return; }
+    const built = buildPayload();
+    if (built.error) { setError(built.error); return; }
 
-    if (mode === "EMAIL") {
-      if (!email.trim()) { setError("Enter your email address."); return; }
-      if (!EMAIL_RE.test(email.trim())) { setError("Enter a valid email address."); return; }
-      if (!password) { setError("Enter your password."); return; }
-    } else if (!/^\d{6}$/.test(otp)) { setError("Enter the 6-digit OTP."); return; }
+    if (!built.payload.email && !built.payload.phone) {
+      setError("Email or phone number is required.");
+      return;
+    }
 
     setIsLoading(true);
     try {
       let result;
-      if (mode === "EMAIL") {
-        result = await login(email.trim().toLowerCase(), password, rememberMe);
-      } else if (typeof auth.loginWithPhone === "function") {
-        result = await auth.loginWithPhone(toPhonePayload(phone), otp, rememberMe);
-      } else {
-        result = await phoneLoginDirect();
+      
+      if (typeof login === "function") {
+        try {
+          result = await login(built.payload);
+        } catch {
+          result = null;
+        }
       }
 
       if (!result || !result.success) {
-        // AuthContext may not expose the HTTP status; treat unknown failures as bad credentials.
-        let status = result?.status || result?.statusCode || 0;
-        const msg = String(result?.error || "");
-        if (!status) status = /network|timeout|reach|offline|econn/i.test(msg) ? 0 : 401;
-        logError("login failed", status);
+        const res = await api.post(ENDPOINTS.login, built.payload);
+        const data = res.data?.data || res.data || {};
+        const token = data.token || data.accessToken || data.access_token;
+        if (!token) throw { response: { status: 401, data } };
+        
+        tokenManager.setTokens(token, data.refreshToken || data.refresh_token);
+        const userData = {
+          ...data,
+          id: data.userId || data.id,
+          name: data.name || data.fullName || "User",
+          email: data.email || built.payload.email || "",
+          phone: data.phone || built.payload.phone || "",
+          role: normalizeRole(data.role),
+        };
+        tokenManager.setUser(userData);
+        result = { success: true, user: userData, data, direct: true };
+      }
+
+      if (!result.success) {
+        const status = result?.status || 401;
         registerFailure(status === 429 ? Number(result?.retryAfter) || 60 : 0);
-        setError(friendlyError({ status, serverMsg: msg, mode, fallback: "Sign in failed. Please try again." }));
+        setError(friendlyError({ status, serverMsg: result?.error, fallback: "Sign in failed. Please try again." }));
         return;
       }
 
-      const role = result.user?.role || result.data?.role || result.data?.user?.role;
-      finishLogin(role, { hard: Boolean(result.direct) });
+      const role = result.user?.role || result.data?.role;
+      finishLogin(role, Boolean(result.direct));
+
     } catch (err) {
       const f = fromAxios(err);
-      logError("login error", f.status || err?.message);
       registerFailure(f.status === 429 ? f.retryAfter || 60 : 0);
-      setError(friendlyError({ ...f, mode, fallback: "Sign in failed. Please try again." }));
-    } finally { setIsLoading(false); }
-  }, [isLoading, isLocked, mode, otpSent, email, password, otp, phone, rememberMe, login, auth, phoneLoginDirect, handleSendOtp, registerFailure, finishLogin]);
+      setError(friendlyError({ ...f, fallback: "Sign in failed. Please try again." }));
+    } finally {
+      setIsLoading(false);
+    }
+  }, [isLoading, isLocked, buildPayload, login, registerFailure, finishLogin]);
 
   const handleSocial = (provider) => {
     window.location.assign(`${apiOrigin}/oauth2/authorization/${provider}`);
   };
 
-  const submitLabel = mode === "EMAIL" ? "Sign in" : otpSent ? "Verify and sign in" : "Send OTP";
   const attemptsLeft = MAX_ATTEMPTS - failedAttempts;
 
   return (
@@ -349,7 +316,7 @@ function LoginPage() {
         </Box>
 
         <Box role="tablist" aria-label="Sign in method" sx={{ display: "flex", borderBottom: `1px solid ${C.border}`, mb: 2.5 }}>
-          {[{ id: "EMAIL", label: "Email" }, { id: "PHONE", label: "Mobile number" }].map((t) => (
+          {[{ id: "EMAIL", label: "Email" }, { id: "PHONE", label: "Mobile" }].map((t) => (
             <Box key={t.id} component="button" type="button" role="tab" aria-selected={mode === t.id} onClick={() => switchMode(t.id)} disabled={isLoading}
               sx={{ flex: 1, py: 1, background: "none", border: "none", borderBottom: `3px solid ${mode === t.id ? C.orange : "transparent"}`, mb: "-1px", fontFamily: FONT, fontSize: 14, fontWeight: mode === t.id ? 700 : 400, color: mode === t.id ? C.text : C.muted, cursor: "pointer", "&:focus-visible": { outline: `2px solid ${C.focus}` } }}>
               {t.label}
@@ -358,50 +325,37 @@ function LoginPage() {
         </Box>
 
         <form onSubmit={handleSubmit} noValidate>
-          {mode === "EMAIL" ? (
-            <Stack spacing={2}>
+          <Stack spacing={2}>
+            {mode === "EMAIL" ? (
               <Field fullWidth size="small" label="Email address" type="email" name="email" autoComplete="username" value={email} inputRef={firstFieldRef}
                 onChange={(e) => { setEmail(e.target.value); setError(null); }} disabled={isLoading} />
-              <Field fullWidth size="small" label="Password" name="password" autoComplete="current-password" type={showPassword ? "text" : "password"} value={password}
-                onChange={(e) => { setPassword(e.target.value); setError(null); }} disabled={isLoading}
-                InputProps={{ endAdornment: (
+            ) : (
+              <Field fullWidth size="small" label="Mobile number" placeholder="9876543210" name="phone" autoComplete="tel" value={phone} inputRef={firstFieldRef}
+                inputProps={{ inputMode: "numeric", maxLength: 10 }} disabled={isLoading}
+                onChange={(e) => { setPhone(e.target.value.replace(/\D/g, "").slice(0, 10)); setError(null); }}
+                InputProps={{ startAdornment: <InputAdornment position="start">+91</InputAdornment> }} />
+            )}
+
+            <Field fullWidth size="small" label="Password" name="password" autoComplete="current-password" type={showPassword ? "text" : "password"} value={password}
+              onChange={(e) => { setPassword(e.target.value); setError(null); }} disabled={isLoading}
+              InputProps={{
+                endAdornment: (
                   <InputAdornment position="end">
                     <IconButton size="small" edge="end" onClick={() => setShowPassword((s) => !s)} aria-label={showPassword ? "Hide password" : "Show password"}>
                       {showPassword ? <VisibilityOff fontSize="small" /> : <Visibility fontSize="small" />}
                     </IconButton>
                   </InputAdornment>
-                ) }} />
-            </Stack>
-          ) : (
-            <Stack spacing={2}>
-              <Field fullWidth size="small" label="Mobile number" placeholder="9876543210" name="phone" autoComplete="tel-national" value={phone} inputRef={firstFieldRef}
-                inputProps={{ inputMode: "numeric", maxLength: 10 }} disabled={isLoading || otpSent}
-                onChange={(e) => { setPhone(e.target.value.replace(/\D/g, "").slice(0, 10)); setError(null); }}
-                InputProps={{ startAdornment: <InputAdornment position="start">+91</InputAdornment> }} />
-              {otpSent && (
-                <>
-                  <Field fullWidth size="small" label="6-digit OTP" name="otp" value={otp} autoFocus
-                    autoComplete="one-time-code" inputProps={{ inputMode: "numeric", maxLength: 6 }} disabled={isLoading}
-                    onChange={(e) => { setOtp(e.target.value.replace(/\D/g, "").slice(0, 6)); setError(null); }} />
-                  <Box sx={{ display: "flex", justifyContent: "space-between" }}>
-                    <TextButton type="button" onClick={() => { setOtpSent(false); setOtp(""); setOtpTimer(0); setInfo(null); }}>Change number</TextButton>
-                    <TextButton type="button" onClick={handleSendOtp} disabled={otpTimer > 0 || isLoading}>{otpTimer > 0 ? `Resend OTP in ${otpTimer}s` : "Resend OTP"}</TextButton>
-                  </Box>
-                </>
-              )}
-            </Stack>
-          )}
+                ),
+              }} />
+          </Stack>
 
           <Box sx={{ display: "flex", justifyContent: "space-between", alignItems: "center", flexWrap: "wrap", my: 1.5 }}>
-            <FormControlLabel
-              control={<Checkbox size="small" checked={rememberMe} onChange={(e) => setRememberMe(e.target.checked)} />}
-              label={<Typography sx={{ fontSize: 13, fontFamily: FONT }}>Keep me signed in</Typography>}
-            />
-            {mode === "EMAIL" && <Link to="/forgot-password" style={{ ...routerLinkSx, fontSize: 13 }}>Forgot password?</Link>}
+            <FormControlLabel control={<Checkbox size="small" checked={rememberMe} onChange={(e) => setRememberMe(e.target.checked)} />} label={<Typography sx={{ fontSize: 13, fontFamily: FONT }}>Keep me signed in</Typography>} />
+            <Link to="/forgot-password" style={{ ...routerLinkSx, fontSize: 13 }}>Forgot password?</Link>
           </Box>
 
-          <PrimaryButton fullWidth type="submit" disabled={isLoading || isLocked || (mode === "PHONE" && !otpSent && phone.length < 10)}>
-            {isLoading ? <CircularProgress size={22} sx={{ color: C.text }} /> : submitLabel}
+          <PrimaryButton fullWidth type="submit" disabled={isLoading || isLocked}>
+            {isLoading ? <CircularProgress size={22} sx={{ color: C.text }} /> : "Sign in"}
           </PrimaryButton>
 
           {failedAttempts >= 2 && !isLocked && (
@@ -412,7 +366,7 @@ function LoginPage() {
         </form>
 
         <Typography sx={{ fontSize: 12, color: C.muted, mt: 2, lineHeight: 1.5, fontFamily: FONT }}>
-          By continuing, you agree to Quickks’ <Link to="/terms" style={routerLinkSx}>Terms of Service</Link> and <Link to="/privacy" style={routerLinkSx}>Privacy Policy</Link>.
+          By continuing, you agree to Quickks' <Link to="/terms" style={routerLinkSx}>Terms</Link> and <Link to="/privacy" style={routerLinkSx}>Privacy</Link>.
         </Typography>
 
         {SOCIAL_PROVIDERS.some((p) => SOCIAL_META[p]) && (
@@ -434,8 +388,8 @@ function LoginPage() {
 
       <Box sx={{ mt: 4, textAlign: "center" }}>
         <Stack direction="row" spacing={2} justifyContent="center" sx={{ mb: 0.75 }}>
-          <Link to="/terms" style={{ ...routerLinkSx, fontSize: 12 }}>Terms of Service</Link>
-          <Link to="/privacy" style={{ ...routerLinkSx, fontSize: 12 }}>Privacy Policy</Link>
+          <Link to="/terms" style={{ ...routerLinkSx, fontSize: 12 }}>Terms</Link>
+          <Link to="/privacy" style={{ ...routerLinkSx, fontSize: 12 }}>Privacy</Link>
           <Link to="/contact" style={{ ...routerLinkSx, fontSize: 12 }}>Help</Link>
         </Stack>
         <Typography sx={{ fontSize: 12, color: C.muted, fontFamily: FONT }}>© {new Date().getFullYear()} Quickks. All rights reserved.</Typography>

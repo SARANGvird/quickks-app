@@ -1,31 +1,25 @@
-// src/components/LoadingScreen.jsx
-import React from "react";
-import { Box, CircularProgress, Typography, Fade } from "@mui/material";
+mport React from "react";
+import { Box, Typography } from "@mui/material";
+import { styled, keyframes } from "@mui/material/styles";
 
-const LoadingScreen = ({ message = "Loading..." }) => {
+const spin = keyframes`0% { transform: rotate(0deg); } 100% { transform: rotate(360deg); }`;
+
+const Root = styled(Box)({
+  display: "flex",
+  flexDirection: "column",
+  alignItems: "center",
+  justifyContent: "center",
+  padding: "40px 20px",
+  minHeight: "200px",
+});
+
+const LoadingSpinner = ({ size = 40, message = "Loading...", fullScreen = false }) => {
   return (
-    <Fade in timeout={500}>
-      <Box
-        sx={{
-          display: "flex",
-          flexDirection: "column",
-          justifyContent: "center",
-          alignItems: "center",
-          height: "100vh",
-          bgcolor: "#f8fafc",
-        }}
-      >
-        <CircularProgress
-          size={56}
-          thickness={4}
-          sx={{ color: "#6366f1", mb: 3 }}
-        />
-        <Typography variant="h6" color="text.secondary" fontWeight={500}>
-          {message}
-        </Typography>
-      </Box>
-    </Fade>
+    <Root sx={{ height: fullScreen ? "100vh" : "auto", bgcolor: fullScreen ? "#f8fafc" : "transparent" }}>
+      <Box sx={{ width: size, height: size, border: "3px solid #e2e8f0", borderTopColor: "#6366f1", borderRadius: "50%", animation: `${spin} 0.8s linear infinite` }} />
+      {message && <Typography sx={{ mt: 2, color: "#64748b", fontSize: "0.9rem", fontWeight: 500 }}>{message}</Typography>}
+    </Root>
   );
 };
 
-export default LoadingScreen;
+export default React.memo(LoadingSpinner);

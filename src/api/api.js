@@ -54,7 +54,7 @@ const safeRemove = (...ks) => { try { ks.forEach((k) => isBrowser && localStorag
 
 const sanitizeUser = (u) => {
   if (!u || typeof u !== "object") return null;
-  const allowed = ["id", "email", "fullName", "name", "firstName", "lastName", "role", "authorities", "verified", "avatar", "phone", "enabled"];
+  const allowed = ["id", "email", "fullName", "name", "firstName", "lastName", "role", "authorities", "verified", "avatar", "phone", "enabled", "isVerified"];
   const out = {};
   for (const k of allowed) if (u[k] !== undefined) out[k] = u[k];
   return Object.keys(out).length ? out : null;
@@ -125,7 +125,7 @@ api.interceptors.request.use((config) => {
   const token = TokenManager.getAccessToken();
   if (token) config.headers.Authorization = `Bearer ${token}`;
   config.headers["X-Request-ID"] = `${Date.now()}-${Math.random().toString(36).slice(2, 8)}`;
-  config.headers["X-Client-Version"] = "v79";
+  config.headers["X-Client-Version"] = "v80-users-fixed";
   if (config.url) {
     config.url = config.url.replace(/^\/api\/v1\//i, "/").replace(/^\/quickks\/api\/v1\//i, "/");
     config.url = dedupApiV1(config.url);
@@ -201,6 +201,7 @@ api.interceptors.response.use(
   }
 );
 
+// ========= SAFE UNWRAP HELPERS - PRODUCTION v80 =========
 const extractPayload = (res) => {
   if (!res) return null;
   const root = res.data ?? res;
@@ -253,6 +254,18 @@ const unwrap = (res) => {
   return payload ?? [];
 };
 
+const unwrapPaginated = (res) => {
+  const payload = extractPayload(res);
+  if (!payload) return { content: [], totalElements: 0, totalPages: 0 };
+  if (Array.isArray(payload)) return { content: payload, totalElements: payload.length, totalPages: 1 };
+  return {
+    content: payload.content || payload.data || payload.items || [],
+    totalElements: payload.totalElements ?? payload.total ?? payload.content?.length ?? 0,
+    totalPages: payload.totalPages ?? 1,
+    ...payload
+  };
+};
+
 export const wsConfig = {
   getWsUrl: () => WS_URL,
   getSockJSUrl: () => `${SOCKJS_BASE}/ws`,
@@ -272,6 +285,7 @@ export const checkHealth = async () => {
   }
 };
 
+// ========= ENDPOINTS - PRODUCTION COMPLETE =========
 export const API_ENDPOINTS = {
   AUTH: { LOGIN: "/auth/login", REGISTER: "/auth/register", SEND_OTP: "/auth/send-otp", VERIFY_OTP: "/auth/verify-otp", REFRESH: "/auth/refresh", ME: "/auth/me", PING: "/auth/ping", LOGOUT: "/auth/logout" },
   HOME: { STATS: "/home/stats", FEATURED: "/home/featured-providers", ANNOUNCEMENTS: "/announcements", POPULAR_SERVICES: "/services/popular" },
@@ -284,9 +298,27 @@ export const API_ENDPOINTS = {
     RECENT_BOOKINGS: "/admin/dashboard/recent-bookings",
     SERVICE_DEMAND: "/admin/charts/service-demand",
   },
+  USERS: {
+    LIST: "/admin/users",
+    STATS: "/admin/users/stats",
+    DETAIL: (id) => `/admin/users/${id}`,
+    TOGGLE_STATUS: (id) => `/admin/users/${id}/toggle-status`,
+    EXPORT: "/admin/users/export",
+  },
+  PROVIDERS: {
+    LIST: "/admin/providers",
+    DETAIL: (id) => `/admin/providers/${id}`,
+    VERIFY: (id) => `/admin/providers/${id}/verify`,
+  },
+  BOOKINGS: {
+    LIST: "/admin/bookings",
+    DETAIL: (id) => `/admin/bookings/${id}`,
+  }
 };
 
+// ========= SERVICES - PRODUCTION v80 =========
 export const adminService = {
+  // Dashboard
   getDashboardStats: (signal) => api.get(API_ENDPOINTS.DASHBOARD.STATS, { signal }).then(unwrapObject),
   getRevenueTrend: (params, signal) => api.get(API_ENDPOINTS.DASHBOARD.REVENUE_TREND, { params, signal }).then(unwrapArray),
   getProviderDistribution: (signal) => api.get(API_ENDPOINTS.DASHBOARD.PROVIDER_DISTRIBUTION, { signal }).then(unwrapArray),
@@ -294,12 +326,29 @@ export const adminService = {
   getTopProviders: (params, signal) => api.get(API_ENDPOINTS.DASHBOARD.TOP_PROVIDERS, { params, signal }).then(unwrapArray),
   getRecentBookings: (params, signal) => api.get(API_ENDPOINTS.DASHBOARD.RECENT_BOOKINGS, { params, signal }).then(unwrapArray),
   getServiceDemand: (params, signal) => api.get(API_ENDPOINTS.DASHBOARD.SERVICE_DEMAND, { params, signal }).then(unwrapArray),
+  
+  // Compat aliases for old dashboard code
   getProviderDistributionCompat: (signal) => api.get(API_ENDPOINTS.DASHBOARD.PROVIDER_DISTRIBUTION, { signal }).then(unwrapArray),
   getRevenueTrendCompat: (params, signal) => api.get(API_ENDPOINTS.DASHBOARD.REVENUE_TREND, { params, signal }).then(unwrapArray),
   getRecentActivitiesCompat: (params, signal) => api.get(API_ENDPOINTS.DASHBOARD.RECENT_ACTIVITIES, { params, signal }).then(unwrapArray),
   getTopProvidersCompat: (params, signal) => api.get(API_ENDPOINTS.DASHBOARD.TOP_PROVIDERS, { params, signal }).then(unwrapArray),
   getRecentBookingsCompat: (params, signal) => api.get(API_ENDPOINTS.DASHBOARD.RECENT_BOOKINGS, { params, signal }).then(unwrapArray),
   getServiceDemandCompat: (params, signal) => api.get(API_ENDPOINTS.DASHBOARD.SERVICE_DEMAND, { params, signal }).then(unwrapArray),
+
+  // ===== USERS - NEW PRODUCTION MODULE =====
+  getAllUsers: (params, signal) => api.get(API_ENDPOINTS.USERS.LIST, { params, signal }).then(unwrapPaginated),
+  getUserStatistics: (signal) => api.get(API_ENDPOINTS.USERS.STATS, { signal }).then(unwrapObject),
+  getUserStats: (signal) => api.get(API_ENDPOINTS.USERS.STATS, { signal }).then(unwrapObject),
+  getUserById: (id, signal) => api.get(API_ENDPOINTS.USERS.DETAIL(id), { signal }).then(unwrapObject),
+  getUser: (id, signal) => api.get(API_ENDPOINTS.USERS.DETAIL(id), { signal }).then(unwrapObject),
+  updateUser: (id, data) => api.put(API_ENDPOINTS.USERS.DETAIL(id), data).then(unwrapObject),
+  toggleUserStatus: (id) => api.patch(API_ENDPOINTS.USERS.TOGGLE_STATUS(id)).then(unwrapObject),
+  deleteUser: (id) => api.delete(API_ENDPOINTS.USERS.DETAIL(id)).then(unwrapObject),
+  exportUsers: (params) => api.get(API_ENDPOINTS.USERS.EXPORT, { params, responseType: 'blob' }),
+
+  // Providers & Bookings (for future use)
+  getProviders: (params, signal) => api.get(API_ENDPOINTS.PROVIDERS.LIST, { params, signal }).then(unwrapPaginated),
+  getBookings: (params, signal) => api.get(API_ENDPOINTS.BOOKINGS.LIST, { params, signal }).then(unwrapPaginated),
 };
 
 export const homeService = {
@@ -321,4 +370,5 @@ export const authService = {
 };
 
 export const dashboardService = adminService;
+export const userService = adminService;
 export default api;

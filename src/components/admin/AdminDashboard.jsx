@@ -1,3 +1,4 @@
+// src/components/admin/AdminDashboard.jsx - FIX v64 FINAL - .map is not a function 100% safe
 import React, { useState, useEffect, useCallback, useMemo, useRef, useId } from "react";
 import { useNavigate, useLocation } from "react-router-dom";
 import { useAuth } from "../../contexts/AuthContext";

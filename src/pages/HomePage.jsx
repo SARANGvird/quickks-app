@@ -8,12 +8,12 @@ import { FaWhatsapp } from "react-icons/fa";
 import {
   Zap, Wrench, Bolt, Settings, MapPin, ShieldCheck, ChevronRight, Menu, X, Star,
   Clock, CreditCard, Search, Phone, LocateFixed, Mail, Shield, Award, Sparkles,
-  ArrowRight, ArrowUp, BadgeCheck, CalendarCheck, UserCheck, Wallet
+  ArrowRight, ArrowUp, BadgeCheck, CalendarCheck, UserCheck, Wallet, Navigation
 } from "lucide-react";
 import {
   Box, Container, Typography, Button, IconButton, Drawer, List, ListItemButton, ListItemText,
-  Divider, useMediaQuery, useTheme, Alert, CircularProgress, TextField, Dialog, DialogTitle,
-  DialogContent, DialogActions, Snackbar, Stack, Fab, Skeleton
+  Divider, Alert, CircularProgress, TextField, Dialog, DialogTitle,
+  DialogContent, DialogActions, Snackbar, Stack, Fab, Skeleton, useMediaQuery, useTheme
 } from "@mui/material";
 import { styled, keyframes } from "@mui/material/styles";
 import QuickksLogo from "../assets/quickks-logo.png";
@@ -29,6 +29,7 @@ const CONTACT = {
 };
 
 const FONT = '"Inter", "Segoe UI", -apple-system, BlinkMacSystemFont, Roboto, sans-serif';
+const HEAD = '"Sora", "Inter", "Segoe UI", sans-serif';
 const EXIT_KEY = "quickks_exit_shown_v82";
 const LOCATION_KEY = "quickks_location_v82";
 const DEFAULT_STATS = { totalCustomers: 8452, totalProviders: 1532, averageRating: 4.8, satisfactionRate: 99.9 };
@@ -65,80 +66,115 @@ const storage = {
 
 /* ───────── Animations ───────── */
 const fadeUp = keyframes`
-  from { opacity: 0; transform: translateY(16px); }
+  from { opacity: 0; transform: translateY(14px); }
   to { opacity: 1; transform: translateY(0); }
 `;
 const pulse = keyframes`
-  0% { box-shadow: 0 0 0 0 rgba(34,197,94,0.55); }
-  70% { box-shadow: 0 0 0 8px rgba(34,197,94,0); }
-  100% { box-shadow: 0 0 0 0 rgba(34,197,94,0); }
+  0% { box-shadow: 0 0 0 0 rgba(198,242,78,0.65); }
+  70% { box-shadow: 0 0 0 8px rgba(198,242,78,0); }
+  100% { box-shadow: 0 0 0 0 rgba(198,242,78,0); }
 `;
-const floatY = keyframes`
-  0%, 100% { transform: translateY(0); }
-  50% { transform: translateY(-8px); }
+const dash = keyframes`
+  to { stroke-dashoffset: -40; }
 `;
 
-/* ───────── Theme tokens (light, warm, non-marketplace) ───────── */
+/* ───────── Quickks tokens ───────── */
 const C = {
-  ink: "#0f172a",
-  navy: "#0b1220",
-  navy2: "#16223b",
-  bg: "#fbfaf6",
-  card: "#ffffff",
-  text: "#0f172a",
-  muted: "#64748b",
-  line: "#ece9e0",
-  yellow: "#fbbf24",
-  yellowDeep: "#f59e0b",
-  yellowSoft: "#fff6dc",
-  teal: "#0d9488",
-  tealSoft: "#e6f7f5",
-  green: "#059669",
-  shadow: "0 1px 2px rgba(15,23,42,0.04), 0 10px 30px -12px rgba(15,23,42,0.12)",
-  shadowHover: "0 2px 4px rgba(15,23,42,0.05), 0 28px 50px -18px rgba(15,23,42,0.22)",
+  forest: "#0B3D2E",
+  forest2: "#0F4C39",
+  forest3: "#14573F",
+  lime: "#C6F24E",
+  limeDeep: "#A9D92F",
+  limeSoft: "#F0FBCB",
+  cream: "#FFF8EC",
+  creamDeep: "#F6EEDC",
+  ink: "#1A1A1A",
+  text: "#1A1A1A",
+  muted: "#5B6B63",
+  line: "#E6E0D0",
+  white: "#FFFFFF",
+  shadow: "0 1px 2px rgba(11,61,46,0.05), 0 8px 24px -12px rgba(11,61,46,0.14)",
+  shadowHover: "0 2px 4px rgba(11,61,46,0.06), 0 24px 44px -18px rgba(11,61,46,0.28)",
 };
 
 const PrimaryButton = styled(Button)({
-  background: `linear-gradient(135deg, ${C.yellow} 0%, ${C.yellowDeep} 100%)`,
-  color: C.ink,
-  borderRadius: 14,
-  textTransform: "none",
-  fontWeight: 800,
-  fontFamily: FONT,
-  boxShadow: "0 8px 20px rgba(245,158,11,0.3)",
-  padding: "10px 22px",
-  transition: "all 0.2s ease",
-  "&:hover": { background: `linear-gradient(135deg, ${C.yellowDeep} 0%, #d97706 100%)`, boxShadow: "0 12px 26px rgba(245,158,11,0.4)", transform: "translateY(-1px)" },
-  "&:focus-visible": { outline: `2px solid ${C.teal}`, outlineOffset: 2 },
-  "&.Mui-disabled": { background: "#f1f5f9", color: "#94a3b8", boxShadow: "none" },
-});
-
-const GhostButton = styled(Button)({
-  background: "transparent",
-  color: C.ink,
-  border: `1.5px solid ${C.ink}`,
-  borderRadius: 14,
+  background: C.forest,
+  color: "#fff",
+  borderRadius: 12,
   textTransform: "none",
   fontWeight: 700,
   fontFamily: FONT,
+  fontSize: 15,
+  letterSpacing: 0,
+  boxShadow: `0 1px 0 rgba(255,255,255,0.12) inset, 0 6px 16px -6px rgba(11,61,46,0.6)`,
+  padding: "10px 22px",
+  transition: "all 0.2s ease",
+  "&:hover": { background: C.forest2, transform: "translateY(-1px)", boxShadow: `0 1px 0 rgba(255,255,255,0.12) inset, 0 12px 22px -8px rgba(11,61,46,0.6), 0 0 0 3px ${C.lime}55` },
+  "&:active": { transform: "translateY(0)" },
+  "&:focus-visible": { outline: `2px solid ${C.limeDeep}`, outlineOffset: 2 },
+  "&.Mui-disabled": { background: "#E7E5DC", color: "#9A9A8E", boxShadow: "none" },
+});
+
+const AccentButton = styled(Button)({
+  background: C.lime,
+  color: C.forest,
+  borderRadius: 12,
+  textTransform: "none",
+  fontWeight: 800,
+  fontFamily: FONT,
+  fontSize: 15,
+  boxShadow: "0 8px 20px -8px rgba(198,242,78,0.8)",
+  padding: "10px 22px",
+  transition: "all 0.2s ease",
+  "&:hover": { background: "#D5F876", transform: "translateY(-1px)", boxShadow: "0 12px 26px -8px rgba(198,242,78,0.9)" },
+  "&:focus-visible": { outline: "2px solid #fff", outlineOffset: 2 },
+  "&.Mui-disabled": { background: "#E7E5DC", color: "#9A9A8E", boxShadow: "none" },
+});
+
+const OutlineButton = styled(Button)({
+  background: "transparent",
+  color: C.forest,
+  border: `1.5px solid ${C.forest}`,
+  borderRadius: 12,
+  textTransform: "none",
+  fontWeight: 700,
+  fontFamily: FONT,
+  fontSize: 15,
   padding: "9px 22px",
   transition: "all 0.2s ease",
-  "&:hover": { background: C.ink, color: "#fff" },
-  "&:focus-visible": { outline: `2px solid ${C.teal}`, outlineOffset: 2 },
+  "&:hover": { background: C.forest, color: "#fff" },
+  "&:focus-visible": { outline: `2px solid ${C.limeDeep}`, outlineOffset: 2 },
   "&.Mui-disabled": { opacity: 0.5 },
+});
+
+const OutlineLightButton = styled(Button)({
+  background: "rgba(255,255,255,0.06)",
+  color: "#fff",
+  border: "1.5px solid rgba(255,255,255,0.28)",
+  borderRadius: 12,
+  textTransform: "none",
+  fontWeight: 700,
+  fontFamily: FONT,
+  fontSize: 15,
+  padding: "9px 22px",
+  backdropFilter: "blur(6px)",
+  transition: "all 0.2s ease",
+  "&:hover": { background: "rgba(255,255,255,0.14)", borderColor: C.lime },
+  "&:focus-visible": { outline: `2px solid ${C.lime}`, outlineOffset: 2 },
 });
 
 const SoftButton = styled(Button)({
   background: "#fff",
-  color: C.ink,
+  color: C.forest,
   border: `1px solid ${C.line}`,
-  borderRadius: 14,
+  borderRadius: 12,
   textTransform: "none",
   fontWeight: 700,
   fontFamily: FONT,
   padding: "9px 22px",
   boxShadow: C.shadow,
-  "&:hover": { background: "#fafafa", boxShadow: C.shadowHover },
+  "&:hover": { background: C.cream, borderColor: C.forest },
+  "&:focus-visible": { outline: `2px solid ${C.limeDeep}`, outlineOffset: 2 },
 });
 
 const NavLinkBtn = styled("button")({
@@ -150,12 +186,11 @@ const NavLinkBtn = styled("button")({
   fontSize: 14.5,
   fontWeight: 600,
   padding: "8px 14px",
-  borderRadius: 999,
+  borderRadius: 10,
   cursor: "pointer",
-  textDecoration: "none",
-  transition: "background 0.2s",
-  "&:hover": { background: "#f1efe7" },
-  "&:focus-visible": { outline: `2px solid ${C.teal}` },
+  transition: "background 0.2s, color 0.2s",
+  "&:hover": { background: C.limeSoft, color: C.forest },
+  "&:focus-visible": { outline: `2px solid ${C.limeDeep}` },
 });
 const NavLinkRouter = styled(Link)({
   color: C.ink,
@@ -163,18 +198,18 @@ const NavLinkRouter = styled(Link)({
   fontSize: 14.5,
   fontWeight: 600,
   padding: "8px 14px",
-  borderRadius: 999,
+  borderRadius: 10,
   textDecoration: "none",
-  transition: "background 0.2s",
-  "&:hover": { background: "#f1efe7" },
-  "&:focus-visible": { outline: `2px solid ${C.teal}` },
+  transition: "background 0.2s, color 0.2s",
+  "&:hover": { background: C.limeSoft, color: C.forest },
+  "&:focus-visible": { outline: `2px solid ${C.limeDeep}` },
 });
 
 const TextLink = styled("button")({
   background: "none",
   border: "none",
   padding: 0,
-  color: C.teal,
+  color: C.forest,
   cursor: "pointer",
   fontSize: 14,
   fontFamily: FONT,
@@ -182,8 +217,12 @@ const TextLink = styled("button")({
   display: "inline-flex",
   alignItems: "center",
   gap: 4,
-  "&:hover": { textDecoration: "underline" },
-  "&:focus-visible": { outline: `2px solid ${C.teal}`, outlineOffset: 2, borderRadius: 2 },
+  textDecoration: "underline",
+  textDecorationColor: C.lime,
+  textDecorationThickness: 3,
+  textUnderlineOffset: 4,
+  "&:hover": { textDecorationColor: C.forest },
+  "&:focus-visible": { outline: `2px solid ${C.limeDeep}`, outlineOffset: 2, borderRadius: 2 },
 });
 
 const FloatingContactButton = styled(Fab)({
@@ -198,32 +237,74 @@ const FloatingContactButton = styled(Fab)({
   transition: "all 0.2s ease",
 });
 
+/* Palette-only tints (forest / lime / cream) */
 const DEFAULT_SERVICES = [
-  { id: 1, icon: <Zap size={40} color="#b45309" />, title: "Electrician", description: "Fans, wiring, switchboards and emergency fixes. Verified pros in 30 min.", color: "#fef3c7", popular: true },
-  { id: 2, icon: <Wrench size={40} color="#0e7490" />, title: "Appliance Repair", description: "Fridge, washing machine and home appliances. Warranty backed.", color: "#cffafe" },
-  { id: 3, icon: <Bolt size={40} color="#c2410c" />, title: "Power Backup", description: "Inverter and generator installation. 24/7 emergency support.", color: "#ffedd5" },
-  { id: 4, icon: <Settings size={40} color="#6d28d9" />, title: "Smart Home", description: "Smart devices, automation and premium setups. Certified experts.", color: "#ede9fe" },
+  { id: 1, icon: <Zap size={38} color={C.forest} strokeWidth={2.1} />, title: "Electrician", description: "Fans, wiring, switchboards and emergency fixes. Verified pros in 30 min.", color: "#EAF9B8", popular: true },
+  { id: 2, icon: <Wrench size={38} color={C.forest} strokeWidth={2.1} />, title: "Appliance Repair", description: "Fridge, washing machine and home appliances. Warranty backed.", color: "#DCEFE4" },
+  { id: 3, icon: <Bolt size={38} color={C.forest} strokeWidth={2.1} />, title: "Power Backup", description: "Inverter and generator installation. 24/7 emergency support.", color: "#F6EDCF" },
+  { id: 4, icon: <Settings size={38} color={C.forest} strokeWidth={2.1} />, title: "Smart Home", description: "Smart devices, automation and premium setups. Certified experts.", color: "#E2ECCB" },
 ];
 
 const Footer = lazy(() => import("../components/Footer").catch(() => ({
   default: () => (
-    <Box sx={{ py: 4, textAlign: "center", bgcolor: C.navy }}>
+    <Box sx={{ py: 4, textAlign: "center", bgcolor: C.forest }}>
       <Container maxWidth="lg">
-        <Typography sx={{ color: "#94a3b8", fontSize: 13, fontFamily: FONT }}>© {new Date().getFullYear()} Quickks. {CONTACT.EMAIL}</Typography>
+        <Typography sx={{ color: "rgba(255,255,255,0.6)", fontSize: 13, fontFamily: FONT }}>© {new Date().getFullYear()} Quickks. {CONTACT.EMAIL}</Typography>
       </Container>
     </Box>
   ),
 })));
 
-function Stars({ value = 4.8, size = 16 }) {
+function Stars({ value = 4.8, size = 16, color = C.forest }) {
   const v = Math.max(0, Math.min(5, Number(value) || 0));
   const rounded = Math.round(v);
   return (
     <Box component="span" role="img" aria-label={`${v} out of 5 stars`} sx={{ display: "inline-flex", gap: "2px", verticalAlign: "middle" }}>
       {[1, 2, 3, 4, 5].map((n) => (
-        <Star key={n} size={size} color={C.yellowDeep} fill={n <= rounded ? C.yellowDeep : "none"} strokeWidth={n <= rounded ? 0 : 1.5} />
+        <Star key={n} size={size} color={color} fill={n <= rounded ? color : "none"} strokeWidth={n <= rounded ? 0 : 1.5} />
       ))}
     </Box>
+  );
+}
+
+/* Lime circular icon badge */
+function LimeBadge({ children, size = 44 }) {
+  return (
+    <Box sx={{ width: size, height: size, borderRadius: "50%", bgcolor: C.lime, color: C.forest, display: "grid", placeItems: "center", flexShrink: 0 }}>{children}</Box>
+  );
+}
+
+function LiveDot({ size = 9, reduced }) {
+  return <Box component="span" aria-hidden="true" sx={{ display: "inline-block", width: size, height: size, borderRadius: "50%", bgcolor: C.lime, animation: reduced ? "none" : `${pulse} 2s infinite`, flexShrink: 0 }} />;
+}
+
+/* Logo: wordmark with lime dot */
+function Wordmark({ light = false }) {
+  return (
+    <Typography component="span" sx={{ fontFamily: HEAD, fontWeight: 800, fontSize: 24, letterSpacing: "-0.04em", color: light ? "#fff" : C.forest, display: "inline-flex", alignItems: "baseline" }}>
+      quickks<Box component="span" sx={{ width: 8, height: 8, borderRadius: "50%", bgcolor: C.lime, border: light ? "none" : `1.5px solid ${C.forest}`, ml: "2px", display: "inline-block" }} />
+    </Typography>
+  );
+}
+
+/* Headline with one highlighted word: lime + underline stroke */
+function Headline({ title, hl, reduced, k }) {
+  const idx = hl ? title.indexOf(hl) : -1;
+  const before = idx >= 0 ? title.slice(0, idx) : title;
+  const after = idx >= 0 ? title.slice(idx + hl.length) : "";
+  return (
+    <Typography key={k} component="h1" sx={{ color: "#fff", fontFamily: HEAD, fontWeight: 800, fontSize: { xs: "2.15rem", sm: "2.8rem", lg: "3.35rem" }, lineHeight: 1.1, letterSpacing: "-0.03em", animation: reduced ? "none" : `${fadeUp} 0.55s ease-out` }}>
+      {before}
+      {idx >= 0 && (
+        <Box component="span" sx={{ position: "relative", display: "inline-block", color: C.lime }}>
+          {hl}
+          <Box component="svg" viewBox="0 0 120 12" preserveAspectRatio="none" aria-hidden="true" sx={{ position: "absolute", left: 0, bottom: -8, width: "100%", height: 10 }}>
+            <path d="M2 8 C 20 1, 40 13, 60 7 S 100 1, 118 7" fill="none" stroke={C.lime} strokeWidth="3.5" strokeLinecap="round" />
+          </Box>
+        </Box>
+      )}
+      {after}
+    </Typography>
   );
 }
 
@@ -232,29 +313,29 @@ function ServiceCard({ s, fallbackRating, onBook, onDetails }) {
   const rating = s.rating || fallbackRating;
   return (
     <Box
-      sx={{ display: "flex", flexDirection: "column", height: "100%", bgcolor: "#fff", border: `1px solid ${C.line}`, borderRadius: "22px", p: 2.2, boxShadow: C.shadow, transition: "all 0.25s ease", animation: `${fadeUp} 0.45s ease-out`, "&:hover": { transform: "translateY(-5px)", boxShadow: C.shadowHover, borderColor: C.yellow }, "&:hover .svc-icon": { transform: "rotate(-6deg) scale(1.08)" } }}
+      sx={{ display: "flex", flexDirection: "column", height: "100%", bgcolor: "#fff", border: `1px solid ${C.line}`, borderRadius: "20px", p: 2.4, boxShadow: C.shadow, transition: "all 0.25s ease", animation: `${fadeUp} 0.45s ease-out`, "&:hover": { transform: "translateY(-5px)", boxShadow: `${C.shadowHover}, 0 0 0 4px ${C.lime}55`, borderColor: C.forest }, "&:hover .svc-icon": { transform: "rotate(-6deg) scale(1.06)" } }}
     >
-      <Box sx={{ display: "flex", alignItems: "flex-start", justifyContent: "space-between", mb: 1.8 }}>
-        <Box className="svc-icon" sx={{ width: 72, height: 72, borderRadius: "20px", bgcolor: s.color, display: "grid", placeItems: "center", transition: "transform 0.3s ease" }}>{s.icon}</Box>
+      <Box sx={{ display: "flex", alignItems: "flex-start", justifyContent: "space-between", mb: 2 }}>
+        <Box className="svc-icon" sx={{ width: 68, height: 68, borderRadius: "18px", bgcolor: s.color, display: "grid", placeItems: "center", transition: "transform 0.3s ease" }}>{s.icon}</Box>
         {s.popular && (
-          <Box sx={{ display: "inline-flex", alignItems: "center", gap: 0.5, bgcolor: C.yellowSoft, color: "#92400e", border: `1px solid ${C.yellow}`, fontSize: 11, fontWeight: 800, px: 1.1, py: 0.4, borderRadius: 999, fontFamily: FONT, letterSpacing: 0.4 }}><Sparkles size={12} /> POPULAR</Box>
+          <Box sx={{ display: "inline-flex", alignItems: "center", gap: 0.5, bgcolor: C.forest, color: C.lime, fontSize: 11, fontWeight: 800, px: 1.2, py: 0.45, borderRadius: 999, fontFamily: FONT, letterSpacing: 0.6 }}><Sparkles size={12} /> POPULAR</Box>
         )}
       </Box>
-      <Typography component="h3" sx={{ fontSize: 18, fontWeight: 800, mb: 0.6, fontFamily: FONT, color: C.text }}>{s.title}</Typography>
-      <Box sx={{ display: "flex", alignItems: "center", gap: 0.7, mb: 1 }}>
+      <Typography component="h3" sx={{ fontSize: 18, fontWeight: 700, mb: 0.6, fontFamily: HEAD, color: C.text, letterSpacing: "-0.01em" }}>{s.title}</Typography>
+      <Box sx={{ display: "flex", alignItems: "center", gap: 0.7, mb: 1.2 }}>
         <Stars value={rating} size={14} />
         <Typography sx={{ color: C.text, fontSize: 13, fontWeight: 700, fontFamily: FONT }}>{rating}</Typography>
       </Box>
-      <Typography sx={{ color: C.muted, fontSize: 14, lineHeight: 1.6, mb: 1.6, flex: 1, fontFamily: FONT }}>{s.description}</Typography>
+      <Typography sx={{ color: C.muted, fontSize: 14, lineHeight: 1.65, mb: 1.8, flex: 1, fontFamily: FONT }}>{s.description}</Typography>
       {s.price && (
-        <Typography sx={{ color: C.text, fontSize: 20, fontWeight: 800, mb: 1, fontFamily: FONT, lineHeight: 1.1 }}>
-          <Box component="span" sx={{ fontSize: 13, color: C.muted, fontWeight: 500 }}>Starting </Box>₹{s.price}
+        <Typography sx={{ color: C.text, fontSize: 20, fontWeight: 700, mb: 1.2, fontFamily: HEAD, lineHeight: 1.1 }}>
+          <Box component="span" sx={{ fontSize: 13, color: C.muted, fontWeight: 500, fontFamily: FONT }}>Starting </Box>₹{s.price}
         </Typography>
       )}
-      <Box sx={{ display: "inline-flex", alignItems: "center", gap: 0.6, alignSelf: "flex-start", color: C.green, bgcolor: "#ecfdf5", borderRadius: 999, px: 1.2, py: 0.4, fontSize: 12, fontWeight: 700, mb: 2, fontFamily: FONT }}><Clock size={13} /> 60 min arrival • Warranty</Box>
+      <Box sx={{ display: "inline-flex", alignItems: "center", gap: 0.6, alignSelf: "flex-start", color: C.forest, bgcolor: C.limeSoft, borderRadius: 999, px: 1.3, py: 0.45, fontSize: 12, fontWeight: 700, mb: 2, fontFamily: FONT }}><Clock size={13} /> 60 min arrival • Warranty</Box>
       <Stack direction="row" spacing={1}>
         <PrimaryButton fullWidth size="small" onClick={() => onBook(s)}>Book now</PrimaryButton>
-        <IconButton aria-label={`Details for ${s.title}`} onClick={() => onDetails(s)} sx={{ border: `1px solid ${C.line}`, borderRadius: "12px", width: 42 }}><ArrowRight size={18} /></IconButton>
+        <IconButton aria-label={`Details for ${s.title}`} onClick={() => onDetails(s)} sx={{ border: `1px solid ${C.line}`, borderRadius: "12px", width: 42, color: C.forest, "&:hover": { bgcolor: C.limeSoft, borderColor: C.forest } }}><ArrowRight size={18} /></IconButton>
       </Stack>
     </Box>
   );
@@ -272,16 +353,13 @@ export default function HomePage() {
   const featuresRef = useRef(null);
   const howRef = useRef(null);
 
-  const [location, setLocation] = useState(() => {
+  const readSavedLocation = () => {
     const saved = storage.get("local", LOCATION_KEY) || "";
     if (!saved || BLOCKED_LOCATION.test(saved)) return "";
     return sanitize(saved);
-  });
-  const [widgetCity, setWidgetCity] = useState(() => {
-    const saved = storage.get("local", LOCATION_KEY) || "";
-    if (!saved || BLOCKED_LOCATION.test(saved)) return "";
-    return sanitize(saved);
-  });
+  };
+  const [location, setLocation] = useState(readSavedLocation);
+  const [widgetCity, setWidgetCity] = useState(readSavedLocation);
   const [loadingLocation, setLoadingLocation] = useState(false);
   const [showLocationDialog, setShowLocationDialog] = useState(false);
   const [manualLocation, setManualLocation] = useState("");
@@ -480,7 +558,7 @@ export default function HomePage() {
     }
   }, [exitEmail, showMessage]);
 
-  /* Hero booking widget: saves city (if changed) and jumps to the filtered services */
+  /* Booking card: saves city (if changed) and jumps to the filtered services */
   const handleFindPros = useCallback((e) => {
     e.preventDefault();
     const city = sanitize(widgetCity);
@@ -509,23 +587,23 @@ export default function HomePage() {
   }, [isAuthenticated, user, navigate, location]);
 
   const features = useMemo(() => [
-    { icon: <ShieldCheck size={28} color={C.green} />, title: "Verified professionals", description: "Aadhaar verified, background checked, rated by 10k+ customers. Your safety is our priority." },
-    { icon: <Clock size={28} color={C.green} />, title: "Fast 60-min response", description: "Book in 1 minute. Nearby expert reaches you within 60 minutes, 24/7." },
-    { icon: <Award size={28} color={C.green} />, title: "Warranty + Guarantee", description: "Up to 90-day warranty, satisfaction guarantee. If not right, we fix it free." },
-    { icon: <CreditCard size={28} color={C.green} />, title: "Secure payments", description: "UPI, Cards, NetBanking, Wallets, COD. 256-bit SSL, up to ₹10K protection." },
+    { icon: <ShieldCheck size={24} />, title: "Verified professionals", description: "Aadhaar verified, background checked, rated by 10k+ customers. Your safety is our priority." },
+    { icon: <Clock size={24} />, title: "Fast 60-min response", description: "Book in 1 minute. Nearby expert reaches you within 60 minutes, 24/7." },
+    { icon: <Award size={24} />, title: "Warranty + Guarantee", description: "Up to 90-day warranty, satisfaction guarantee. If not right, we fix it free." },
+    { icon: <CreditCard size={24} />, title: "Secure payments", description: "UPI, Cards, NetBanking, Wallets, COD. 256-bit SSL, up to ₹10K protection." },
   ], []);
 
   const steps = useMemo(() => [
-    { icon: <CalendarCheck size={22} />, title: "Choose a service", description: "Pick what you need fixed, tell us your location. Takes 30 seconds." },
-    { icon: <UserCheck size={22} />, title: "Get matched instantly", description: "AI matches closest verified pro free right now. Track live." },
-    { icon: <Wallet size={22} />, title: "Job done, pay securely", description: "Review work, pay via secure gateway, rate experience. Warranty auto-applied." },
+    { icon: <CalendarCheck size={24} />, title: "Choose a service", description: "Pick what you need fixed, tell us your location. Takes 30 seconds." },
+    { icon: <UserCheck size={24} />, title: "Get matched instantly", description: "AI matches closest verified pro free right now. Track live." },
+    { icon: <Wallet size={24} />, title: "Job done, pay securely", description: "Review work, pay via secure gateway, rate experience. Warranty auto-applied." },
   ], []);
 
   const statsData = useMemo(() => {
     const placeholder = "–";
     return [
       { value: isLoadingStats ? placeholder : formatCount(liveStats.totalCustomers), label: "Happy customers" },
-      { value: isLoadingStats ? placeholder : formatCount(liveStats.totalProviders), label: "Verified experts" },
+      { value: isLoadingStats ? placeholder : formatCount(liveStats.totalProviders), label: "Verified experts", live: true },
       { value: isLoadingStats ? placeholder : `${Number(liveStats.averageRating).toFixed(1)}`, label: "Average rating", stars: true },
       { value: isLoadingStats ? placeholder : `${Number(liveStats.satisfactionRate).toFixed(0)}%`, label: "Satisfaction" },
     ];
@@ -556,9 +634,9 @@ export default function HomePage() {
   }, [services, query, category, sortBy, liveStats.averageRating]);
 
   const heroSlides = useMemo(() => [
-    { title: "Trusted home services, at your door in 60 minutes", text: "Verified electricians, appliance repair & more. Ratings, secure pay, warranty. Support: connect@quickks.in", tag: "60-min response" },
-    { title: "Get ₹100 off your first booking today", text: "Create free account, save instantly. Verified pros, SSL secure, no surprises.", tag: "New customer offer" },
-    { title: "Power cut? Appliance down? We are on it ⚡", text: "Emergency fixes from nearby experts who reach fast. Call +91 93713 65677", tag: "Emergency help" },
+    { title: "Trusted home services, at your door in 60 minutes", hl: "Trusted", text: "Verified electricians, appliance repair & more. Ratings, secure pay, warranty. Support: connect@quickks.in", tag: "60-min response" },
+    { title: "Get ₹100 off your first booking today", hl: "₹100", text: "Create free account, save instantly. Verified pros, SSL secure, no surprises.", tag: "New customer offer" },
+    { title: "Power cut? Appliance down? We are on it ⚡", hl: "Power", text: "Emergency fixes from nearby experts who reach fast. Call +91 93713 65677", tag: "Emergency help" },
   ], []);
 
   useEffect(() => {
@@ -584,15 +662,24 @@ export default function HomePage() {
     contactPoint: { "@type": "ContactPoint", email: CONTACT.EMAIL, telephone: CONTACT.PHONE_TEL, contactType: "customer support", availableLanguage: ["en", "hi", "mr"] }
   });
 
-  const sectionHeading = (eyebrow, title, sub) => (
-    <Box sx={{ mb: 3.5, textAlign: { xs: "left", md: "center" } }}>
-      <Typography sx={{ display: "inline-block", color: C.teal, bgcolor: C.tealSoft, fontSize: 12, fontWeight: 800, letterSpacing: 1, textTransform: "uppercase", px: 1.4, py: 0.4, borderRadius: 999, mb: 1.2, fontFamily: FONT }}>{eyebrow}</Typography>
-      <Typography component="h2" sx={{ fontSize: { xs: 26, md: 36 }, fontWeight: 900, letterSpacing: "-0.03em", lineHeight: 1.15, fontFamily: FONT, color: C.text }}>{title}</Typography>
-      {sub && <Typography sx={{ color: C.muted, mt: 1, fontSize: { xs: 14.5, md: 16 }, fontFamily: FONT, maxWidth: 620, mx: { md: "auto" } }}>{sub}</Typography>}
+  const sectionHeading = (eyebrow, title, sub, light = false) => (
+    <Box sx={{ mb: 5, textAlign: { xs: "left", md: "center" } }}>
+      <Typography sx={{ display: "inline-flex", alignItems: "center", gap: 0.8, color: light ? C.forest : C.lime, bgcolor: light ? C.lime : C.forest, fontSize: 12, fontWeight: 800, letterSpacing: 1.2, textTransform: "uppercase", px: 1.6, py: 0.5, borderRadius: 999, mb: 1.6, fontFamily: FONT }}>{eyebrow}</Typography>
+      <Typography component="h2" sx={{ fontSize: { xs: 26, md: 38 }, fontWeight: 800, letterSpacing: "-0.03em", lineHeight: 1.15, fontFamily: HEAD, color: light ? "#fff" : C.forest }}>{title}</Typography>
+      {sub && <Typography sx={{ color: light ? "rgba(255,255,255,0.72)" : C.muted, mt: 1.4, fontSize: { xs: 14.5, md: 16 }, fontFamily: FONT, maxWidth: 640, mx: { md: "auto" }, lineHeight: 1.65 }}>{sub}</Typography>}
     </Box>
   );
 
-  const fieldSx = { "& .MuiOutlinedInput-root": { borderRadius: "14px", bgcolor: "#fff", fontFamily: FONT, "& fieldset": { borderColor: C.line }, "&:hover fieldset": { borderColor: C.yellowDeep }, "&.Mui-focused fieldset": { borderColor: C.yellowDeep } } };
+  const fieldSx = {
+    "& .MuiOutlinedInput-root": {
+      borderRadius: "12px", bgcolor: "#fff", fontFamily: FONT, fontSize: 15,
+      "& fieldset": { borderColor: C.line },
+      "&:hover fieldset": { borderColor: C.forest },
+      "&.Mui-focused fieldset": { borderColor: C.forest, borderWidth: 2 },
+    },
+    "& .MuiInputLabel-root": { fontFamily: FONT, fontWeight: 600 },
+    "& .MuiInputLabel-root.Mui-focused": { color: C.forest },
+  };
 
   return (
     <ErrorBoundary>
@@ -606,39 +693,39 @@ export default function HomePage() {
         <meta property="og:url" content="https://www.quickks.in/" />
         <meta property="og:type" content="website" />
         <meta property="og:email" content={CONTACT.EMAIL} />
-        <meta name="theme-color" content={C.navy} />
+        <meta name="theme-color" content={C.forest} />
         <link rel="preconnect" href="https://nominatim.openstreetmap.org" />
         <script type="application/ld+json">{jsonLd}</script>
-        <style>{`@import url('https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700;800;900&display=swap');`}</style>
+        <style>{`@import url('https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700;800&family=Sora:wght@500;600;700;800&display=swap');`}</style>
       </Helmet>
 
-      <Box sx={{ minHeight: "100vh", bgcolor: C.bg, fontFamily: FONT, color: C.text, overflowX: "hidden" }}>
+      <Box sx={{ minHeight: "100vh", bgcolor: C.cream, fontFamily: FONT, color: C.text, overflowX: "hidden", WebkitFontSmoothing: "antialiased" }}>
         <FloatingContactButton onClick={handleWhatsApp} aria-label="Chat on WhatsApp"><FaWhatsapp size={28} /></FloatingContactButton>
 
         {scrolled && (
-          <Fab size="small" aria-label="Scroll to top" onClick={() => window.scrollTo({ top: 0, behavior: prefersReducedMotion ? "auto" : "smooth" })} sx={{ position: "fixed", bottom: 96, right: 32, zIndex: 1100, bgcolor: C.ink, color: "#fff", "&:hover": { bgcolor: C.navy2 } }}><ArrowUp size={18} /></Fab>
+          <Fab size="small" aria-label="Scroll to top" onClick={() => window.scrollTo({ top: 0, behavior: prefersReducedMotion ? "auto" : "smooth" })} sx={{ position: "fixed", bottom: 96, right: 32, zIndex: 1100, bgcolor: C.lime, color: C.forest, "&:hover": { bgcolor: "#D5F876" } }}><ArrowUp size={18} /></Fab>
         )}
 
-        {/* ───────── Top announcement strip ───────── */}
+        {/* ───────── Announcement strip ───────── */}
         {!isMobile && (
-          <Box sx={{ bgcolor: C.navy, color: "#cbd5e1", fontSize: 13, fontFamily: FONT }}>
+          <Box sx={{ bgcolor: C.forest, color: "rgba(255,255,255,0.8)", fontSize: 13, fontFamily: FONT }}>
             <Container maxWidth="lg" sx={{ display: "flex", alignItems: "center", justifyContent: "space-between", py: 0.9 }}>
-              <Box sx={{ display: "flex", alignItems: "center", gap: 1 }}><Sparkles size={14} color={C.yellow} /> Get ₹100 off your first booking</Box>
-              <Box sx={{ display: "flex", alignItems: "center", gap: 2.5 }}>
-                <Box component="a" href={`tel:${CONTACT.PHONE_TEL}`} rel="noopener" sx={{ color: "inherit", textDecoration: "none", display: "inline-flex", alignItems: "center", gap: 0.7, "&:hover": { color: "#fff" } }}><Phone size={13} /> {CONTACT.PHONE_DISPLAY}</Box>
-                <Box component="a" href={`mailto:${CONTACT.EMAIL}`} rel="noopener" sx={{ color: "inherit", textDecoration: "none", display: "inline-flex", alignItems: "center", gap: 0.7, "&:hover": { color: "#fff" } }}><Mail size={13} /> {CONTACT.EMAIL}</Box>
+              <Box sx={{ display: "flex", alignItems: "center", gap: 1 }}><Sparkles size={14} color={C.lime} /> Get ₹100 off your first booking</Box>
+              <Box sx={{ display: "flex", alignItems: "center", gap: 3 }}>
+                <Box component="a" href={`tel:${CONTACT.PHONE_TEL}`} rel="noopener" sx={{ color: "inherit", textDecoration: "none", display: "inline-flex", alignItems: "center", gap: 0.7, "&:hover": { color: C.lime } }}><Phone size={13} /> {CONTACT.PHONE_DISPLAY}</Box>
+                <Box component="a" href={`mailto:${CONTACT.EMAIL}`} rel="noopener" sx={{ color: "inherit", textDecoration: "none", display: "inline-flex", alignItems: "center", gap: 0.7, "&:hover": { color: C.lime } }}><Mail size={13} /> {CONTACT.EMAIL}</Box>
               </Box>
             </Container>
           </Box>
         )}
 
         {/* ───────── Navbar ───────── */}
-        <Box component="header" sx={{ position: "sticky", top: 0, zIndex: 1000, bgcolor: "rgba(251,250,246,0.88)", backdropFilter: "blur(14px) saturate(160%)", borderBottom: `1px solid ${C.line}` }}>
+        <Box component="header" sx={{ position: "sticky", top: 0, zIndex: 1000, bgcolor: "rgba(255,255,255,0.92)", backdropFilter: "blur(14px) saturate(160%)", borderBottom: `1px solid ${C.line}` }}>
           <Container maxWidth="lg">
-            <Box sx={{ display: "flex", alignItems: "center", gap: 1.5, py: 1.1 }}>
-              <Box component="button" type="button" onClick={() => navigate("/")} aria-label="Quickks home" sx={{ display: "flex", alignItems: "center", gap: 1, background: "none", border: "none", cursor: "pointer", p: 0, "&:focus-visible": { outline: `2px solid ${C.teal}`, borderRadius: "8px" } }}>
-                <Box component="img" src={QuickksLogo} alt="Quickks" sx={{ width: 38, height: 38, objectFit: "contain", bgcolor: "#fff", border: `1px solid ${C.line}`, borderRadius: "12px", p: "5px" }} />
-                <Typography sx={{ fontWeight: 900, color: C.ink, fontSize: 22, letterSpacing: "-0.04em", fontFamily: FONT }}>Quickks<Box component="span" sx={{ color: C.yellowDeep }}>.</Box></Typography>
+            <Box sx={{ display: "flex", alignItems: "center", gap: 1.5, py: 1.2 }}>
+              <Box component="button" type="button" onClick={() => navigate("/")} aria-label="Quickks home" sx={{ display: "flex", alignItems: "center", gap: 1.1, background: "none", border: "none", cursor: "pointer", p: 0, "&:focus-visible": { outline: `2px solid ${C.limeDeep}`, borderRadius: "8px" } }}>
+                <Box component="img" src={QuickksLogo} alt="" sx={{ width: 38, height: 38, objectFit: "contain", bgcolor: "#fff", border: `1px solid ${C.line}`, borderRadius: "11px", p: "5px" }} />
+                <Wordmark />
               </Box>
 
               {!isMobile && (
@@ -652,8 +739,8 @@ export default function HomePage() {
               )}
 
               <Box sx={{ display: "flex", alignItems: "center", gap: 1, ml: isMobile ? "auto" : 0 }}>
-                <Box component="button" type="button" onClick={() => setShowLocationDialog(true)} aria-label="Change location" sx={{ display: "inline-flex", alignItems: "center", gap: 0.7, bgcolor: "#fff", border: `1px solid ${C.line}`, borderRadius: 999, px: 1.4, py: 0.7, cursor: "pointer", fontFamily: FONT, fontSize: 13.5, fontWeight: 700, color: C.ink, maxWidth: { xs: 130, md: 170 }, "&:hover": { borderColor: C.yellowDeep }, "&:focus-visible": { outline: `2px solid ${C.teal}` } }}>
-                  <MapPin size={15} color={C.teal} style={{ flexShrink: 0 }} />
+                <Box component="button" type="button" onClick={() => setShowLocationDialog(true)} aria-label="Change location" sx={{ display: "inline-flex", alignItems: "center", gap: 0.7, bgcolor: C.cream, border: `1px solid ${C.line}`, borderRadius: "10px", px: 1.4, py: 0.8, cursor: "pointer", fontFamily: FONT, fontSize: 13.5, fontWeight: 700, color: C.forest, maxWidth: { xs: 130, md: 170 }, transition: "border-color 0.2s", "&:hover": { borderColor: C.forest }, "&:focus-visible": { outline: `2px solid ${C.limeDeep}` } }}>
+                  <MapPin size={15} style={{ flexShrink: 0 }} />
                   <Box component="span" sx={{ overflow: "hidden", textOverflow: "ellipsis", whiteSpace: "nowrap" }}>{loadingLocation ? "Detecting…" : location || "Set location"}</Box>
                 </Box>
 
@@ -669,7 +756,7 @@ export default function HomePage() {
                 )}
 
                 {isMobile && (
-                  <IconButton onClick={() => setMobileMenuOpen(true)} aria-label="Open menu" sx={{ color: C.ink, border: `1px solid ${C.line}`, bgcolor: "#fff", borderRadius: "12px" }}><Menu size={20} /></IconButton>
+                  <IconButton onClick={() => setMobileMenuOpen(true)} aria-label="Open menu" sx={{ color: C.forest, border: `1px solid ${C.line}`, bgcolor: "#fff", borderRadius: "12px" }}><Menu size={20} /></IconButton>
                 )}
               </Box>
             </Box>
@@ -677,11 +764,11 @@ export default function HomePage() {
         </Box>
 
         {/* ───────── Drawer ───────── */}
-        <Drawer anchor="right" open={mobileMenuOpen} onClose={() => setMobileMenuOpen(false)} PaperProps={{ sx: { width: 320, maxWidth: "88vw", bgcolor: C.bg, borderRadius: "22px 0 0 22px" } }}>
-          <Box sx={{ background: `linear-gradient(135deg, ${C.navy} 0%, ${C.navy2} 100%)`, color: "#fff", p: 2.2, display: "flex", justifyContent: "space-between", alignItems: "center" }}>
+        <Drawer anchor="right" open={mobileMenuOpen} onClose={() => setMobileMenuOpen(false)} PaperProps={{ sx: { width: 320, maxWidth: "88vw", bgcolor: C.cream, borderRadius: "24px 0 0 24px" } }}>
+          <Box sx={{ bgcolor: C.forest, color: "#fff", p: 2.4, display: "flex", justifyContent: "space-between", alignItems: "center" }}>
             <Box>
-              <Typography sx={{ fontWeight: 800, fontFamily: FONT, fontSize: 15 }}>{isAuthenticated ? `Hello, ${greetingName}` : "Welcome to Quickks"}</Typography>
-              <Typography sx={{ fontSize: 12, color: "#94a3b8", fontFamily: FONT }}>{CONTACT.EMAIL}</Typography>
+              <Typography sx={{ fontWeight: 700, fontFamily: HEAD, fontSize: 15 }}>{isAuthenticated ? `Hello, ${greetingName}` : "Welcome to Quickks"}</Typography>
+              <Typography sx={{ fontSize: 12, color: "rgba(255,255,255,0.6)", fontFamily: FONT }}>{CONTACT.EMAIL}</Typography>
             </Box>
             <IconButton onClick={() => setMobileMenuOpen(false)} aria-label="Close menu" sx={{ color: "#fff", bgcolor: "rgba(255,255,255,0.1)" }}><X size={18} /></IconButton>
           </Box>
@@ -691,7 +778,7 @@ export default function HomePage() {
                 key={item.label}
                 {...(item.to ? { component: Link, to: item.to } : {})}
                 onClick={() => { setMobileMenuOpen(false); if (item.ref) setTimeout(() => scrollToSection(item.ref), 250); }}
-                sx={{ borderRadius: "12px", mx: 1, mb: 0.4 }}
+                sx={{ borderRadius: "12px", mx: 1, mb: 0.4, "&:hover": { bgcolor: C.limeSoft } }}
               >
                 <ListItemText primary={item.label} primaryTypographyProps={{ fontWeight: 700, fontFamily: FONT }} />
                 <ChevronRight size={16} color={C.muted} />
@@ -708,7 +795,7 @@ export default function HomePage() {
             ) : (
               <>
                 <PrimaryButton fullWidth onClick={() => { setMobileMenuOpen(false); navigate("/register"); }}>Get started free</PrimaryButton>
-                <GhostButton fullWidth onClick={() => { setMobileMenuOpen(false); navigate("/login"); }}>Sign in</GhostButton>
+                <OutlineButton fullWidth onClick={() => { setMobileMenuOpen(false); navigate("/login"); }}>Sign in</OutlineButton>
               </>
             )}
           </Stack>
@@ -721,100 +808,125 @@ export default function HomePage() {
             onMouseLeave={() => setHeroPaused(false)}
             onFocus={() => setHeroPaused(true)}
             onBlur={() => setHeroPaused(false)}
-            sx={{ position: "relative", overflow: "hidden", pt: { xs: 5, md: 9 }, pb: { xs: 6, md: 10 }, background: `radial-gradient(700px at 85% 10%, ${C.yellow}33 0%, transparent 60%), radial-gradient(600px at 0% 100%, ${C.teal}1f 0%, transparent 60%), ${C.bg}` }}
+            sx={{
+              position: "relative", overflow: "hidden", color: "#fff",
+              pt: { xs: 6, md: 10 }, pb: { xs: 14, md: 18 },
+              background: `radial-gradient(900px at 85% -10%, ${C.lime}2e 0%, transparent 55%), radial-gradient(700px at 0% 100%, ${C.forest3} 0%, transparent 60%), linear-gradient(135deg, ${C.forest} 0%, ${C.forest2} 100%)`,
+              "&::before": { content: '""', position: "absolute", inset: 0, backgroundImage: "radial-gradient(rgba(255,255,255,0.09) 1.2px, transparent 1.2px)", backgroundSize: "26px 26px", maskImage: "linear-gradient(180deg, #000 0%, transparent 85%)", WebkitMaskImage: "linear-gradient(180deg, #000 0%, transparent 85%)" },
+            }}
           >
             <Container maxWidth="lg" sx={{ position: "relative" }}>
-              <Box sx={{ display: "grid", gridTemplateColumns: { xs: "1fr", md: "1.15fr 0.85fr" }, gap: { xs: 5, md: 6 }, alignItems: "center" }}>
+              <Box sx={{ display: "grid", gridTemplateColumns: { xs: "1fr", lg: "1.1fr 0.9fr" }, gap: { xs: 6, lg: 8 }, alignItems: "center" }}>
                 <Box aria-live="polite">
-                  <Box sx={{ display: "inline-flex", alignItems: "center", gap: 1, bgcolor: "#fff", border: `1px solid ${C.line}`, borderRadius: 999, px: 1.6, py: 0.6, mb: 2.4, boxShadow: C.shadow }}>
-                    <Box sx={{ width: 8, height: 8, borderRadius: "50%", bgcolor: "#22c55e", animation: prefersReducedMotion ? "none" : `${pulse} 2s infinite` }} />
-                    <Typography sx={{ fontSize: 12.5, fontWeight: 700, fontFamily: FONT }}>{liveStats.totalProviders}+ pros online • {slide.tag}</Typography>
-                  </Box>
-                  <Typography key={`h-${heroIndex}`} component="h1" sx={{ fontWeight: 900, fontFamily: FONT, fontSize: { xs: "2.2rem", md: "3.5rem" }, lineHeight: 1.06, letterSpacing: "-0.035em", mb: 2.2, color: C.ink, animation: prefersReducedMotion ? "none" : `${fadeUp} 0.55s ease-out`, minHeight: { md: "3.8em" } }}>{slide.title}</Typography>
-                  <Typography key={`p-${heroIndex}`} sx={{ color: C.muted, fontSize: { xs: 16, md: 18 }, lineHeight: 1.65, fontFamily: FONT, maxWidth: 560, mb: 3, animation: prefersReducedMotion ? "none" : `${fadeUp} 0.7s ease-out` }}>{slide.text}</Typography>
-
-                  {/* Booking widget */}
-                  <Box component="form" onSubmit={handleFindPros} role="search" sx={{ bgcolor: "#fff", border: `1px solid ${C.line}`, borderRadius: "22px", p: 1.5, boxShadow: C.shadowHover, display: "grid", gridTemplateColumns: { xs: "1fr", sm: "1fr 1fr auto" }, gap: 1.2, alignItems: "stretch", maxWidth: 640 }}>
-                    <TextField
-                      select
-                      SelectProps={{ native: true }}
-                      value={category}
-                      onChange={(e) => setCategory(sanitize(e.target.value))}
-                      label="Service"
-                      size="small"
-                      inputProps={{ "aria-label": "Choose a service" }}
-                      InputLabelProps={{ shrink: true }}
-                      sx={fieldSx}
-                    >
-                      {categories.map((c) => <option key={c} value={c}>{c === "All" ? "All services" : c}</option>)}
-                    </TextField>
-                    <TextField
-                      size="small"
-                      label="Your city"
-                      placeholder="e.g. Pune"
-                      value={widgetCity}
-                      onChange={(e) => setWidgetCity(sanitizeTyping(e.target.value))}
-                      InputLabelProps={{ shrink: true }}
-                      inputProps={{ maxLength: 100, "aria-label": "Your city" }}
-                      InputProps={{ endAdornment: (
-                        <IconButton size="small" onClick={detectLocation} disabled={loadingLocation} aria-label="Detect my location" edge="end">
-                          {loadingLocation ? <CircularProgress size={16} /> : <LocateFixed size={18} color={C.teal} />}
-                        </IconButton>
-                      ) }}
-                      sx={fieldSx}
-                    />
-                    <PrimaryButton type="submit" startIcon={<Search size={18} />} sx={{ borderRadius: "14px", minHeight: 40 }}>Find pros</PrimaryButton>
+                  <Box sx={{ display: "inline-flex", alignItems: "center", gap: 1.2, bgcolor: "rgba(255,255,255,0.08)", border: "1px solid rgba(255,255,255,0.16)", borderRadius: 999, px: 1.8, py: 0.7, mb: 3 }}>
+                    <LiveDot reduced={prefersReducedMotion} />
+                    <Typography sx={{ fontSize: 12.5, fontWeight: 700, fontFamily: FONT, color: "#fff" }}>{liveStats.totalProviders}+ pros online • {slide.tag}</Typography>
                   </Box>
 
-                  <Stack direction="row" spacing={1.2} mt={2.5} alignItems="center" flexWrap="wrap" useFlexGap>
-                    <Box sx={{ display: "inline-flex", alignItems: "center", gap: 0.7, fontSize: 13, fontWeight: 700, color: C.green }}><Shield size={15} /> Verified & Secure</Box>
-                    <Box sx={{ display: "inline-flex", alignItems: "center", gap: 0.7 }}><Stars value={4.8} size={14} /><Typography sx={{ fontSize: 13, fontWeight: 700 }}>4.8/5 (10k+ reviews)</Typography></Box>
+                  <Box sx={{ minHeight: { lg: 190 } }}>
+                    <Headline title={slide.title} hl={slide.hl} reduced={prefersReducedMotion} k={`h-${heroIndex}`} />
+                  </Box>
+                  <Typography key={`p-${heroIndex}`} sx={{ color: "rgba(255,255,255,0.78)", fontSize: { xs: 16, md: 18 }, lineHeight: 1.7, fontFamily: FONT, maxWidth: 560, mt: 3.5, mb: 2.5, animation: prefersReducedMotion ? "none" : `${fadeUp} 0.7s ease-out` }}>{slide.text}</Typography>
+
+                  <Typography sx={{ display: "inline-flex", alignItems: "center", gap: 1, fontFamily: HEAD, fontSize: 14, fontWeight: 600, color: C.lime, mb: 3.5 }}><Navigation size={15} /> Gharacha manus, 60 min madhe</Typography>
+
+                  <Stack direction={{ xs: "column", sm: "row" }} spacing={1.5}>
+                    <AccentButton size="large" onClick={cta.action} sx={{ px: 4, py: 1.4, fontSize: 16 }}>{cta.label} <ChevronRight size={18} style={{ marginLeft: 4 }} /></AccentButton>
+                    <OutlineLightButton size="large" onClick={() => scrollToSection(servicesRef)} sx={{ px: 4, py: 1.3, fontSize: 16 }}>Browse services</OutlineLightButton>
                   </Stack>
 
-                  <Box sx={{ display: "flex", alignItems: "center", gap: 1.2, mt: 3 }}>
+                  <Stack direction="row" spacing={2.5} mt={4} alignItems="center" flexWrap="wrap" useFlexGap>
+                    <Box sx={{ display: "inline-flex", alignItems: "center", gap: 0.8, fontSize: 13.5, fontWeight: 600, color: "#fff" }}><Shield size={16} color={C.lime} /> Verified & Secure</Box>
+                    <Box sx={{ display: "inline-flex", alignItems: "center", gap: 0.9 }}><Stars value={4.8} size={14} color={C.lime} /><Typography sx={{ fontSize: 13.5, fontWeight: 600, color: "#fff" }}>4.8/5 (10k+ reviews)</Typography></Box>
+                  </Stack>
+
+                  <Box sx={{ display: "flex", alignItems: "center", gap: 1, mt: 4 }} role="tablist" aria-label="Hero slides">
                     {heroSlides.map((_, i) => (
-                      <Box key={i} component="button" type="button" onClick={() => setHeroIndex(i)} aria-label={`Show slide ${i + 1}`} aria-current={i === heroIndex} sx={{ width: i === heroIndex ? 30 : 10, height: 10, p: 0, borderRadius: 999, border: "none", bgcolor: i === heroIndex ? C.ink : "#d6d3c8", cursor: "pointer", transition: "all 0.3s ease" }} />
+                      <Box key={i} component="button" type="button" role="tab" onClick={() => setHeroIndex(i)} aria-label={`Show slide ${i + 1}`} aria-selected={i === heroIndex} aria-current={i === heroIndex} sx={{ width: i === heroIndex ? 32 : 10, height: 6, p: 0, borderRadius: 999, border: "none", bgcolor: i === heroIndex ? C.lime : "rgba(255,255,255,0.3)", cursor: "pointer", transition: "all 0.3s ease", "&:hover": { bgcolor: i === heroIndex ? C.lime : "rgba(255,255,255,0.55)" } }} />
                     ))}
                   </Box>
                 </Box>
 
-                {/* Hero visual: clickable service tiles */}
+                {/* Booking card */}
                 <Box sx={{ position: "relative" }}>
-                  <Box sx={{ display: "grid", gridTemplateColumns: "repeat(2, 1fr)", gap: 1.8 }}>
-                    {services.slice(0, 4).map((s, i) => (
-                      <Box
-                        key={`tile-${s.id || i}`}
-                        component="button"
-                        type="button"
-                        onClick={() => { setCategory(s.title); setQuery(""); scrollToSection(servicesRef); }}
-                        aria-label={`Browse ${s.title}`}
-                        sx={{ textAlign: "left", cursor: "pointer", border: `1px solid ${C.line}`, borderRadius: "24px", bgcolor: "#fff", p: 2, fontFamily: FONT, boxShadow: C.shadow, transition: "all 0.25s", mt: i % 2 === 1 ? 3 : 0, animation: prefersReducedMotion ? "none" : `${floatY} ${5 + i}s ease-in-out infinite`, "&:hover": { boxShadow: C.shadowHover, borderColor: C.yellow }, "&:focus-visible": { outline: `2px solid ${C.teal}` } }}
-                      >
-                        <Box sx={{ width: 64, height: 64, borderRadius: "18px", bgcolor: s.color, display: "grid", placeItems: "center", mb: 1.4 }}>{s.icon}</Box>
-                        <Typography sx={{ fontWeight: 800, fontSize: 15.5, mb: 0.3, fontFamily: FONT }}>{s.title}</Typography>
-                        <Typography sx={{ fontSize: 12.5, color: C.green, fontWeight: 700, display: "flex", alignItems: "center", gap: 0.5, fontFamily: FONT }}><Clock size={12} /> 60 min</Typography>
+                  <Box component="form" onSubmit={handleFindPros} role="search" sx={{ bgcolor: "#fff", color: C.text, borderRadius: "24px", p: { xs: 2.5, md: 3.2 }, boxShadow: "0 30px 60px -24px rgba(0,0,0,0.5)", border: `1px solid ${C.line}` }}>
+                    <Box sx={{ display: "flex", alignItems: "center", gap: 1.4, mb: 2.4 }}>
+                      <LimeBadge size={42}><Search size={20} /></LimeBadge>
+                      <Box>
+                        <Typography component="h2" sx={{ fontFamily: HEAD, fontWeight: 700, fontSize: 18, color: C.forest, lineHeight: 1.2 }}>Book a verified pro</Typography>
+                        <Typography sx={{ fontSize: 13, color: C.muted, fontFamily: FONT }}>Takes under a minute</Typography>
                       </Box>
-                    ))}
-                  </Box>
-                  <Box sx={{ position: "absolute", left: { xs: 8, md: -18 }, bottom: -18, bgcolor: C.ink, color: "#fff", borderRadius: "16px", px: 1.8, py: 1.1, display: "flex", alignItems: "center", gap: 1, boxShadow: "0 16px 32px rgba(15,23,42,0.3)" }}>
-                    <BadgeCheck size={20} color={C.yellow} />
-                    <Typography sx={{ fontSize: 13, fontWeight: 700, fontFamily: FONT }}>Aadhaar-verified experts</Typography>
+                    </Box>
+                    <Stack spacing={1.8}>
+                      <TextField
+                        select
+                        SelectProps={{ native: true }}
+                        value={category}
+                        onChange={(e) => setCategory(sanitize(e.target.value))}
+                        label="Service"
+                        size="small"
+                        fullWidth
+                        inputProps={{ "aria-label": "Choose a service" }}
+                        InputLabelProps={{ shrink: true }}
+                        sx={fieldSx}
+                      >
+                        {categories.map((c) => <option key={c} value={c}>{c === "All" ? "All services" : c}</option>)}
+                      </TextField>
+                      <TextField
+                        size="small"
+                        fullWidth
+                        label="Your city"
+                        placeholder="e.g. Pune"
+                        value={widgetCity}
+                        onChange={(e) => setWidgetCity(sanitizeTyping(e.target.value))}
+                        InputLabelProps={{ shrink: true }}
+                        inputProps={{ maxLength: 100, "aria-label": "Your city" }}
+                        InputProps={{ endAdornment: (
+                          <IconButton size="small" onClick={detectLocation} disabled={loadingLocation} aria-label="Detect my location" edge="end">
+                            {loadingLocation ? <CircularProgress size={16} sx={{ color: C.forest }} /> : <LocateFixed size={18} color={C.forest} />}
+                          </IconButton>
+                        ) }}
+                        sx={fieldSx}
+                      />
+                      <PrimaryButton type="submit" fullWidth startIcon={<Search size={18} />} sx={{ py: 1.3 }}>Find pros</PrimaryButton>
+                    </Stack>
+
+                    <Stack direction="row" spacing={0.8} mt={2.2} flexWrap="wrap" useFlexGap alignItems="center">
+                      <Typography sx={{ fontSize: 12.5, color: C.muted, fontWeight: 600, fontFamily: FONT, mr: 0.4 }}>Popular:</Typography>
+                      {services.slice(0, 4).map((s, i) => (
+                        <Box key={`chip-${s.id || i}`} component="button" type="button" onClick={() => { setCategory(s.title); setQuery(""); scrollToSection(servicesRef); }} aria-label={`Browse ${s.title}`} sx={{ cursor: "pointer", fontFamily: FONT, fontSize: 12.5, fontWeight: 700, color: C.forest, bgcolor: C.limeSoft, border: "1px solid transparent", borderRadius: 999, px: 1.3, py: 0.5, transition: "all 0.2s", "&:hover": { borderColor: C.forest, bgcolor: C.lime }, "&:focus-visible": { outline: `2px solid ${C.limeDeep}` } }}>{s.title}</Box>
+                      ))}
+                    </Stack>
+
+                    {/* Live tracking strip with dotted route */}
+                    <Box sx={{ mt: 2.6, pt: 2.2, borderTop: `1px dashed ${C.line}`, display: "flex", alignItems: "center", gap: 1.4 }}>
+                      <LimeBadge size={38}><Navigation size={17} /></LimeBadge>
+                      <Box sx={{ flex: 1, minWidth: 0 }}>
+                        <Typography sx={{ fontFamily: HEAD, fontWeight: 700, fontSize: 14, color: C.forest }}>Pro arriving in 32 min</Typography>
+                        <Box sx={{ display: "flex", alignItems: "center", gap: 0.8, mt: 0.2 }}>
+                          <Box component="span" sx={{ width: 7, height: 7, borderRadius: "50%", bgcolor: "#22A559", animation: prefersReducedMotion ? "none" : `${pulse} 2s infinite` }} />
+                          <Typography sx={{ fontSize: 12, color: C.muted, fontWeight: 600, fontFamily: FONT }}>Live Tracking</Typography>
+                        </Box>
+                      </Box>
+                      <Box component="svg" viewBox="0 0 120 12" aria-hidden="true" sx={{ width: 90, height: 10, flexShrink: 0, "& path": { animation: prefersReducedMotion ? "none" : `${dash} 1.6s linear infinite` } }}>
+                        <path d="M2 6 L 118 6" stroke={C.forest} strokeWidth="3" strokeLinecap="round" strokeDasharray="1 9" fill="none" />
+                      </Box>
+                      <Box sx={{ width: 22, height: 22, borderRadius: "50%", bgcolor: C.lime, border: `2px solid ${C.forest}`, display: "grid", placeItems: "center", flexShrink: 0 }}><MapPin size={11} color={C.forest} /></Box>
+                    </Box>
                   </Box>
                 </Box>
               </Box>
             </Container>
           </Box>
 
-          {/* ───────── Account strip ───────── */}
-          <Container maxWidth="lg" sx={{ mt: { xs: -1, md: -2 }, position: "relative", zIndex: 2 }}>
-            <Box sx={{ bgcolor: "#fff", border: `1px solid ${C.line}`, borderRadius: "22px", boxShadow: C.shadow, p: { xs: 2.2, md: 2.8 }, display: "flex", flexDirection: { xs: "column", md: "row" }, alignItems: { md: "center" }, gap: 2 }}>
-              <Box sx={{ display: "flex", alignItems: "center", gap: 1.5, flex: 1 }}>
-                <Box sx={{ width: 48, height: 48, borderRadius: "15px", background: isAuthenticated ? `linear-gradient(135deg, ${C.yellow}, ${C.yellowDeep})` : C.tealSoft, display: "grid", placeItems: "center", fontWeight: 900, flexShrink: 0 }}>
-                  {isAuthenticated ? greetingName[0]?.toUpperCase() : <Shield size={22} color={C.teal} />}
-                </Box>
+          {/* ───────── Account strip (overlaps hero) ───────── */}
+          <Container maxWidth="lg" sx={{ mt: { xs: -9, md: -11 }, position: "relative", zIndex: 2 }}>
+            <Box sx={{ bgcolor: "#fff", border: `1px solid ${C.line}`, borderRadius: "22px", boxShadow: C.shadowHover, p: { xs: 2.4, md: 3 }, display: "flex", flexDirection: { xs: "column", md: "row" }, alignItems: { md: "center" }, gap: 2.4 }}>
+              <Box sx={{ display: "flex", alignItems: "center", gap: 1.8, flex: 1 }}>
+                <LimeBadge size={52}>{isAuthenticated ? <Typography sx={{ fontFamily: HEAD, fontWeight: 800, fontSize: 20 }}>{greetingName[0]?.toUpperCase()}</Typography> : <Shield size={24} />}</LimeBadge>
                 <Box>
-                  <Typography component="h2" sx={{ fontSize: 18, fontWeight: 800, fontFamily: FONT }}>{isAuthenticated ? `Welcome back, ${greetingName}` : "Secure & trusted"}</Typography>
-                  <Typography sx={{ color: C.muted, fontSize: 14, fontFamily: FONT }}>{isAuthenticated ? `Pick up where you left off or book something new. Support: ${CONTACT.EMAIL}` : `Track pro, save addresses, rebook 1-tap. SSL secured. Help: ${CONTACT.EMAIL}`}</Typography>
+                  <Typography component="h2" sx={{ fontSize: 19, fontWeight: 700, fontFamily: HEAD, color: C.forest }}>{isAuthenticated ? `Welcome back, ${greetingName}` : "Secure & trusted"}</Typography>
+                  <Typography sx={{ color: C.muted, fontSize: 14, fontFamily: FONT, lineHeight: 1.55 }}>{isAuthenticated ? `Pick up where you left off or book something new. Support: ${CONTACT.EMAIL}` : `Track pro, save addresses, rebook 1-tap. SSL secured. Help: ${CONTACT.EMAIL}`}</Typography>
                 </Box>
               </Box>
               <Stack direction={{ xs: "column", sm: "row" }} spacing={1.2}>
@@ -823,28 +935,49 @@ export default function HomePage() {
                 ) : (
                   <>
                     <PrimaryButton onClick={() => navigate("/login")}>Sign in securely</PrimaryButton>
-                    <GhostButton onClick={() => navigate("/register")}>Create account – free</GhostButton>
+                    <OutlineButton onClick={() => navigate("/register")}>Create account – free</OutlineButton>
                   </>
                 )}
               </Stack>
             </Box>
           </Container>
 
+          {/* ───────── Trust badges ───────── */}
+          <Container maxWidth="lg" sx={{ mt: 3 }}>
+            <Box component="ul" sx={{ listStyle: "none", m: 0, p: 0, display: "grid", gridTemplateColumns: { xs: "1fr", sm: "repeat(3, 1fr)" }, gap: 2 }}>
+              {[
+                { icon: <Shield size={22} />, title: "Verified & Secure", sub: "Aadhaar checked professionals" },
+                { icon: <Clock size={22} />, title: "60-minute arrival", sub: "Nearby expert, 24/7" },
+                { icon: <BadgeCheck size={22} />, title: "4.8/5 (10k+ reviews)", sub: "Warranty on every job" },
+              ].map((b) => (
+                <Box component="li" key={b.title} sx={{ display: "flex", alignItems: "center", gap: 1.6, bgcolor: "#fff", border: `1px solid ${C.line}`, borderRadius: "18px", p: 2 }}>
+                  <LimeBadge size={46}>{b.icon}</LimeBadge>
+                  <Box>
+                    <Typography sx={{ fontFamily: HEAD, fontWeight: 700, fontSize: 15, color: C.forest }}>{b.title}</Typography>
+                    <Typography sx={{ fontSize: 13, color: C.muted, fontFamily: FONT }}>{b.sub}</Typography>
+                  </Box>
+                </Box>
+              ))}
+            </Box>
+          </Container>
+
           {/* ───────── Stats ───────── */}
           <Container maxWidth="lg" sx={{ mt: 3 }}>
-            <Box sx={{ display: "grid", gridTemplateColumns: { xs: "repeat(2, 1fr)", md: "repeat(4, 1fr)" }, gap: 2 }}>
-              {statsData.map((stat) => (
-                <Box key={stat.label} sx={{ textAlign: "center", py: 2.4, px: 1, borderRadius: "20px", bgcolor: C.navy, color: "#fff", position: "relative", overflow: "hidden", "&::before": { content: '""', position: "absolute", top: -30, right: -30, width: 90, height: 90, borderRadius: "50%", background: `radial-gradient(circle, ${C.yellow}40, transparent 70%)` } }}>
-                  <Typography sx={{ position: "relative", fontSize: { xs: 28, md: 36 }, fontWeight: 900, lineHeight: 1.1, fontFamily: FONT, color: stat.stars ? C.yellow : "#fff" }}>{stat.value}</Typography>
-                  {stat.stars && !isLoadingStats && <Box sx={{ mt: 0.6, display: "flex", justifyContent: "center" }}><Stars value={liveStats.averageRating} size={15} /></Box>}
-                  <Typography sx={{ position: "relative", color: "#94a3b8", fontSize: 12, mt: 0.8, fontFamily: FONT, fontWeight: 700, letterSpacing: 1, textTransform: "uppercase" }}>{stat.label}</Typography>
+            <Box sx={{ display: "grid", gridTemplateColumns: { xs: "repeat(2, 1fr)", md: "repeat(4, 1fr)" }, borderRadius: "22px", overflow: "hidden", bgcolor: C.forest, color: "#fff", position: "relative", "&::before": { content: '""', position: "absolute", top: -60, right: -40, width: 200, height: 200, borderRadius: "50%", background: `radial-gradient(circle, ${C.lime}33, transparent 70%)`, pointerEvents: "none" } }}>
+              {statsData.map((stat, i) => (
+                <Box key={stat.label} sx={{ position: "relative", textAlign: "center", py: 3.2, px: 1.5, borderLeft: { md: i === 0 ? "none" : "1px solid rgba(255,255,255,0.1)" }, borderTop: { xs: i > 1 ? "1px solid rgba(255,255,255,0.1)" : "none", md: "none" } }}>
+                  <Typography sx={{ fontSize: { xs: 28, md: 38 }, fontWeight: 800, lineHeight: 1.1, fontFamily: HEAD, letterSpacing: "-0.02em", color: stat.stars ? C.lime : "#fff" }}>{stat.value}</Typography>
+                  {stat.stars && !isLoadingStats && <Box sx={{ mt: 0.7, display: "flex", justifyContent: "center" }}><Stars value={liveStats.averageRating} size={15} color={C.lime} /></Box>}
+                  <Typography sx={{ color: "rgba(255,255,255,0.65)", fontSize: 12, mt: 1, fontFamily: FONT, fontWeight: 700, letterSpacing: 1.1, textTransform: "uppercase", display: "inline-flex", alignItems: "center", gap: 1 }}>
+                    {stat.live && <LiveDot size={8} reduced={prefersReducedMotion} />}{stat.label}
+                  </Typography>
                 </Box>
               ))}
             </Box>
           </Container>
 
           {/* ───────── Services ───────── */}
-          <Box ref={servicesRef} id="services" sx={{ pt: { xs: 7, md: 10 }, scrollMarginTop: 90 }}>
+          <Box ref={servicesRef} id="services" sx={{ pt: { xs: 8, md: 12 }, scrollMarginTop: 90 }}>
             <Container maxWidth="lg">
               {sectionHeading("Services", "Popular services near you", location ? `Showing pros available in ${location}.` : "Pick a service, set your city and book in a minute.")}
 
@@ -858,7 +991,7 @@ export default function HomePage() {
                   InputProps={{ startAdornment: <Search size={18} color={C.muted} style={{ marginRight: 8 }} />, endAdornment: query ? <IconButton size="small" aria-label="Clear search" onClick={() => setQuery("")} edge="end"><X size={16} /></IconButton> : null }}
                   sx={{ flex: 1, ...fieldSx }}
                 />
-                <TextField select SelectProps={{ native: true }} size="small" value={sortBy} onChange={(e) => setSortBy(e.target.value)} inputProps={{ "aria-label": "Sort services" }} sx={{ minWidth: 190, ...fieldSx }}>
+                <TextField select SelectProps={{ native: true }} size="small" value={sortBy} onChange={(e) => setSortBy(e.target.value)} inputProps={{ "aria-label": "Sort services" }} sx={{ minWidth: 200, ...fieldSx }}>
                   <option value="recommended">Sort: Recommended</option>
                   <option value="rating">Sort: Top rated</option>
                   <option value="price">Sort: Price low to high</option>
@@ -871,26 +1004,26 @@ export default function HomePage() {
                   {categories.map((c) => {
                     const active = category === c;
                     return (
-                      <Box key={c} component="button" type="button" role="tab" aria-selected={active} onClick={() => setCategory(c)} sx={{ flexShrink: 0, cursor: "pointer", fontFamily: FONT, fontSize: 13.5, fontWeight: 700, px: 2, py: 0.8, borderRadius: 999, border: `1.5px solid ${active ? C.ink : C.line}`, bgcolor: active ? C.ink : "#fff", color: active ? "#fff" : C.ink, transition: "all 0.2s", "&:hover": { borderColor: C.ink }, "&:focus-visible": { outline: `2px solid ${C.teal}`, outlineOffset: 2 } }}>{c}</Box>
+                      <Box key={c} component="button" type="button" role="tab" aria-selected={active} onClick={() => setCategory(c)} sx={{ flexShrink: 0, cursor: "pointer", fontFamily: FONT, fontSize: 13.5, fontWeight: 700, px: 2, py: 0.9, borderRadius: 999, border: `1.5px solid ${active ? C.forest : C.line}`, bgcolor: active ? C.forest : "#fff", color: active ? C.lime : C.forest, transition: "all 0.2s", "&:hover": { borderColor: C.forest }, "&:focus-visible": { outline: `2px solid ${C.limeDeep}`, outlineOffset: 2 } }}>{c}</Box>
                     );
                   })}
                 </Box>
               )}
 
-              <Box sx={{ display: "flex", alignItems: "center", justifyContent: "space-between", mb: 2 }} aria-live="polite">
+              <Box sx={{ display: "flex", alignItems: "center", justifyContent: "space-between", mb: 2.5 }} aria-live="polite">
                 <Typography sx={{ color: C.muted, fontSize: 14, fontFamily: FONT }}>{isLoadingServices ? "Loading services…" : `${visibleServices.length} service${visibleServices.length === 1 ? "" : "s"} found`}</Typography>
                 {filtersActive && <TextLink type="button" onClick={clearFilters}>Clear filters</TextLink>}
               </Box>
 
               {isLoadingServices ? (
                 <Box sx={{ display: "grid", gridTemplateColumns: { xs: "1fr", sm: "repeat(2, 1fr)", lg: "repeat(4, 1fr)" }, gap: 2.5 }}>
-                  {[1, 2, 3, 4].map((i) => <Skeleton key={i} variant="rounded" height={340} sx={{ borderRadius: "22px" }} />)}
+                  {[1, 2, 3, 4].map((i) => <Skeleton key={i} variant="rounded" height={360} sx={{ borderRadius: "20px" }} />)}
                 </Box>
               ) : visibleServices.length === 0 ? (
-                <Box sx={{ py: 8, textAlign: "center", bgcolor: "#fff", border: `1px dashed ${C.line}`, borderRadius: "22px" }}>
-                  <Typography sx={{ fontSize: 20, fontWeight: 800, mb: 1, fontFamily: FONT }}>No services match “{sanitize(query)}”</Typography>
+                <Box sx={{ py: 8, px: 2, textAlign: "center", bgcolor: "#fff", border: `1.5px dashed ${C.line}`, borderRadius: "22px" }}>
+                  <Typography sx={{ fontSize: 20, fontWeight: 700, mb: 1, fontFamily: HEAD, color: C.forest }}>No services match “{sanitize(query)}”</Typography>
                   <Typography sx={{ color: C.muted, mb: 2.5, fontFamily: FONT }}>Check spelling or try broader term. Contact {CONTACT.EMAIL} for help.</Typography>
-                  <GhostButton onClick={clearFilters}>Show all services</GhostButton>
+                  <OutlineButton onClick={clearFilters}>Show all services</OutlineButton>
                 </Box>
               ) : (
                 <Box role="list" sx={{ display: "grid", gridTemplateColumns: { xs: "1fr", sm: "repeat(2, 1fr)", lg: "repeat(4, 1fr)" }, gap: 2.5 }}>
@@ -905,16 +1038,23 @@ export default function HomePage() {
           </Box>
 
           {/* ───────── How it works ───────── */}
-          <Box ref={howRef} id="how" sx={{ pt: { xs: 7, md: 10 }, scrollMarginTop: 90 }}>
+          <Box ref={howRef} id="how" sx={{ pt: { xs: 8, md: 12 }, scrollMarginTop: 90 }}>
             <Container maxWidth="lg">
               {sectionHeading("How it works", "Fixed in 3 simple steps", "From booking to warranty, everything happens in one place.")}
-              <Box component="ol" sx={{ listStyle: "none", m: 0, p: 0, display: "grid", gridTemplateColumns: { xs: "1fr", md: "repeat(3, 1fr)" }, gap: 2.5 }}>
+              <Box component="ol" sx={{ listStyle: "none", m: 0, p: 0, display: "grid", gridTemplateColumns: { xs: "1fr", md: "repeat(3, 1fr)" }, gap: 3, position: "relative" }}>
+                {!isMobile && (
+                  <Box component="svg" viewBox="0 0 400 12" preserveAspectRatio="none" aria-hidden="true" sx={{ position: "absolute", top: 54, left: "17%", width: "66%", height: 10, pointerEvents: "none", "& path": { animation: prefersReducedMotion ? "none" : `${dash} 1.6s linear infinite` } }}>
+                    <path d="M0 6 L 400 6" stroke={C.forest} strokeOpacity="0.45" strokeWidth="3" strokeLinecap="round" strokeDasharray="1 9" fill="none" />
+                  </Box>
+                )}
                 {steps.map((s, i) => (
-                  <Box component="li" key={s.title} sx={{ position: "relative", bgcolor: "#fff", border: `1px solid ${C.line}`, borderRadius: "24px", p: 3, boxShadow: C.shadow, transition: "all 0.25s", "&:hover": { transform: "translateY(-4px)", boxShadow: C.shadowHover } }}>
-                    <Typography sx={{ position: "absolute", top: 14, right: 22, fontSize: 64, fontWeight: 900, color: "#f1efe7", lineHeight: 1, fontFamily: FONT }}>{i + 1}</Typography>
-                    <Box sx={{ position: "relative", width: 50, height: 50, borderRadius: "16px", bgcolor: C.ink, color: C.yellow, display: "grid", placeItems: "center", mb: 2 }}>{s.icon}</Box>
-                    <Typography component="h3" sx={{ position: "relative", fontSize: 18, fontWeight: 800, mb: 0.8, fontFamily: FONT }}>{s.title}</Typography>
-                    <Typography sx={{ position: "relative", color: C.muted, fontSize: 14.5, lineHeight: 1.65, fontFamily: FONT }}>{s.description}</Typography>
+                  <Box component="li" key={s.title} sx={{ position: "relative", bgcolor: "#fff", border: `1px solid ${C.line}`, borderRadius: "22px", p: 3.2, pt: 4, textAlign: "center", boxShadow: C.shadow, transition: "all 0.25s", "&:hover": { transform: "translateY(-4px)", borderColor: C.forest, boxShadow: `${C.shadowHover}, 0 0 0 4px ${C.lime}55` } }}>
+                    <Box sx={{ position: "relative", width: 60, height: 60, borderRadius: "50%", bgcolor: C.forest, color: C.lime, display: "grid", placeItems: "center", mx: "auto", mb: 2.2 }}>
+                      {s.icon}
+                      <Box sx={{ position: "absolute", top: -6, right: -8, width: 26, height: 26, borderRadius: "50%", bgcolor: C.lime, color: C.forest, fontFamily: HEAD, fontWeight: 800, fontSize: 13, display: "grid", placeItems: "center", border: "2px solid #fff" }}>{i + 1}</Box>
+                    </Box>
+                    <Typography component="h3" sx={{ fontSize: 18, fontWeight: 700, mb: 0.8, fontFamily: HEAD, color: C.forest }}>{s.title}</Typography>
+                    <Typography sx={{ color: C.muted, fontSize: 14.5, lineHeight: 1.7, fontFamily: FONT }}>{s.description}</Typography>
                   </Box>
                 ))}
               </Box>
@@ -922,44 +1062,46 @@ export default function HomePage() {
           </Box>
 
           {/* ───────── Why Quickks ───────── */}
-          <Box ref={featuresRef} id="features" sx={{ pt: { xs: 7, md: 10 }, scrollMarginTop: 90 }}>
+          <Box ref={featuresRef} id="features" sx={{ pt: { xs: 8, md: 12 }, scrollMarginTop: 90 }}>
             <Container maxWidth="lg">
-              {sectionHeading("Why Quickks", "Why 10k+ customers trust Quickks", `Secure, verified, warranty backed • Support: ${CONTACT.EMAIL}`)}
-              <Box sx={{ display: "grid", gridTemplateColumns: { xs: "1fr", sm: "repeat(2, 1fr)", md: "repeat(4, 1fr)" }, gap: 2.5 }}>
-                {features.map((f) => (
-                  <Box key={f.title} sx={{ p: 2.8, bgcolor: "#fff", border: `1px solid ${C.line}`, borderRadius: "24px", transition: "all 0.25s", "&:hover": { borderColor: C.green, boxShadow: "0 18px 36px rgba(5,150,105,0.12)", transform: "translateY(-4px)" } }}>
-                    <Box sx={{ width: 54, height: 54, borderRadius: "16px", background: "linear-gradient(135deg, #ecfdf5, #d1fae5)", display: "grid", placeItems: "center", mb: 2 }}>{f.icon}</Box>
-                    <Typography component="h3" sx={{ fontSize: 17, fontWeight: 800, mb: 0.8, fontFamily: FONT }}>{f.title}</Typography>
-                    <Typography sx={{ color: C.muted, fontSize: 14, lineHeight: 1.65, fontFamily: FONT }}>{f.description}</Typography>
+              <Box sx={{ bgcolor: C.forest, borderRadius: "32px", px: { xs: 2.5, md: 6 }, py: { xs: 6, md: 8 }, position: "relative", overflow: "hidden", "&::before": { content: '""', position: "absolute", top: -120, right: -80, width: 360, height: 360, borderRadius: "50%", background: `radial-gradient(circle, ${C.lime}2e, transparent 70%)`, pointerEvents: "none" } }}>
+                <Box sx={{ position: "relative" }}>
+                  {sectionHeading("Why Quickks", "Why 10k+ customers trust Quickks", `Secure, verified, warranty backed • Support: ${CONTACT.EMAIL}`, true)}
+                  <Box sx={{ display: "grid", gridTemplateColumns: { xs: "1fr", sm: "repeat(2, 1fr)", lg: "repeat(4, 1fr)" }, gap: 2.2 }}>
+                    {features.map((f) => (
+                      <Box key={f.title} sx={{ p: 3, bgcolor: "rgba(255,255,255,0.06)", border: "1px solid rgba(255,255,255,0.12)", borderRadius: "20px", transition: "all 0.25s", "&:hover": { borderColor: C.lime, bgcolor: "rgba(255,255,255,0.1)", transform: "translateY(-4px)", boxShadow: `0 0 28px ${C.lime}33` } }}>
+                        <LimeBadge size={50}>{f.icon}</LimeBadge>
+                        <Typography component="h3" sx={{ fontSize: 17, fontWeight: 700, mt: 2.2, mb: 0.9, fontFamily: HEAD, color: "#fff" }}>{f.title}</Typography>
+                        <Typography sx={{ color: "rgba(255,255,255,0.72)", fontSize: 14, lineHeight: 1.7, fontFamily: FONT }}>{f.description}</Typography>
+                      </Box>
+                    ))}
                   </Box>
-                ))}
+                </Box>
               </Box>
             </Container>
           </Box>
 
           {/* ───────── CTA ───────── */}
-          <Box sx={{ py: { xs: 7, md: 10 } }}>
+          <Box sx={{ py: { xs: 8, md: 12 } }}>
             <Container maxWidth="lg">
-              <Box sx={{ position: "relative", overflow: "hidden", borderRadius: "32px", p: { xs: 3.5, md: 7 }, textAlign: "center", color: "#fff", background: `linear-gradient(135deg, ${C.navy} 0%, ${C.navy2} 100%)` }}>
-                <Box sx={{ position: "absolute", top: -80, right: -60, width: 260, height: 260, borderRadius: "50%", background: `radial-gradient(circle, ${C.yellow}55, transparent 70%)` }} />
-                <Box sx={{ position: "absolute", bottom: -90, left: -60, width: 280, height: 280, borderRadius: "50%", background: `radial-gradient(circle, ${C.teal}55, transparent 70%)` }} />
+              <Box sx={{ position: "relative", overflow: "hidden", borderRadius: "32px", p: { xs: 4, md: 8 }, textAlign: "center", bgcolor: C.lime, color: C.forest, "&::before": { content: '""', position: "absolute", inset: 0, backgroundImage: `radial-gradient(${C.forest}22 1.3px, transparent 1.3px)`, backgroundSize: "22px 22px" } }}>
                 <Box sx={{ position: "relative" }}>
-                  <Typography component="h2" sx={{ fontSize: { xs: 26, md: 40 }, fontWeight: 900, mb: 1.5, fontFamily: FONT, letterSpacing: "-0.03em" }}>Ready to get it fixed? ⚡</Typography>
-                  <Typography sx={{ color: "#cbd5e1", mb: 3.5, fontFamily: FONT, fontSize: { xs: 14.5, md: 17 }, maxWidth: 540, mx: "auto", lineHeight: 1.65 }}>
-                    Questions? Call <Box component="a" href={`tel:${CONTACT.PHONE_TEL}`} sx={{ color: C.yellow, fontWeight: 800, textDecoration: "none", "&:hover": { textDecoration: "underline" } }}>{CONTACT.PHONE_DISPLAY}</Box> or email <Box component="a" href={`mailto:${CONTACT.EMAIL}`} sx={{ color: C.yellow, fontWeight: 800, textDecoration: "none", "&:hover": { textDecoration: "underline" } }}>{CONTACT.EMAIL}</Box>
+                  <Typography component="h2" sx={{ fontSize: { xs: 28, md: 44 }, fontWeight: 800, mb: 1.6, fontFamily: HEAD, letterSpacing: "-0.03em" }}>Ready to get it fixed? ⚡</Typography>
+                  <Typography sx={{ color: `${C.forest}cc`, mb: 4, fontFamily: FONT, fontSize: { xs: 15, md: 17 }, maxWidth: 560, mx: "auto", lineHeight: 1.7 }}>
+                    Questions? Call <Box component="a" href={`tel:${CONTACT.PHONE_TEL}`} sx={{ color: C.forest, fontWeight: 800, textDecoration: "underline", textUnderlineOffset: 4 }}>{CONTACT.PHONE_DISPLAY}</Box> or email <Box component="a" href={`mailto:${CONTACT.EMAIL}`} sx={{ color: C.forest, fontWeight: 800, textDecoration: "underline", textUnderlineOffset: 4 }}>{CONTACT.EMAIL}</Box>
                   </Typography>
                   <Stack direction={{ xs: "column", sm: "row" }} spacing={1.5} justifyContent="center">
-                    <PrimaryButton size="large" onClick={cta.action} sx={{ px: 5, py: 1.3, fontSize: 16 }}>{cta.label}</PrimaryButton>
-                    {!isAuthenticated && <Button size="large" onClick={() => navigate("/login")} sx={{ px: 5, py: 1.3, fontSize: 16, color: "#fff", border: "1.5px solid rgba(255,255,255,0.4)", borderRadius: "14px", textTransform: "none", fontWeight: 700, fontFamily: FONT, "&:hover": { bgcolor: "rgba(255,255,255,0.1)", borderColor: "#fff" } }}>Sign in</Button>}
+                    <PrimaryButton size="large" onClick={cta.action} sx={{ px: 5, py: 1.4, fontSize: 16 }}>{cta.label}</PrimaryButton>
+                    {!isAuthenticated && <OutlineButton size="large" onClick={() => navigate("/login")} sx={{ px: 5, py: 1.3, fontSize: 16 }}>Sign in</OutlineButton>}
                   </Stack>
-                  <Typography sx={{ color: "#94a3b8", fontSize: 12.5, mt: 3, display: "flex", alignItems: "center", justifyContent: "center", flexWrap: "wrap", gap: 1, fontFamily: FONT }}><Shield size={14} /> SSL secured • Verified pros • Warranty backed • {CONTACT.EMAIL}</Typography>
+                  <Typography sx={{ color: `${C.forest}b3`, fontSize: 12.5, mt: 3.5, display: "flex", alignItems: "center", justifyContent: "center", flexWrap: "wrap", gap: 1, fontFamily: FONT, fontWeight: 600 }}><Shield size={14} /> SSL secured • Verified pros • Warranty backed • {CONTACT.EMAIL}</Typography>
                 </Box>
               </Box>
             </Container>
           </Box>
         </Box>
 
-        <Suspense fallback={<Box sx={{ py: 4, textAlign: "center", bgcolor: C.navy }}><CircularProgress size={24} sx={{ color: C.yellow }} /></Box>}>
+        <Suspense fallback={<Box sx={{ py: 4, textAlign: "center", bgcolor: C.forest }}><CircularProgress size={24} sx={{ color: C.lime }} /></Box>}>
           <Footer />
         </Suspense>
 
@@ -967,22 +1109,22 @@ export default function HomePage() {
         <Dialog open={Boolean(selectedService)} onClose={() => setSelectedService(null)} maxWidth="xs" fullWidth PaperProps={{ sx: { borderRadius: "24px", overflow: "hidden" } }}>
           {selectedService && (
             <>
-              <Box sx={{ bgcolor: selectedService.color, py: 4, display: "grid", placeItems: "center", position: "relative" }}>
-                <IconButton onClick={() => setSelectedService(null)} aria-label="Close" sx={{ position: "absolute", top: 10, right: 10, bgcolor: "rgba(255,255,255,0.7)" }}><X size={18} /></IconButton>
+              <Box sx={{ bgcolor: selectedService.color, py: 4.5, display: "grid", placeItems: "center", position: "relative" }}>
+                <IconButton onClick={() => setSelectedService(null)} aria-label="Close" sx={{ position: "absolute", top: 10, right: 10, bgcolor: "rgba(255,255,255,0.75)", "&:hover": { bgcolor: "#fff" } }}><X size={18} /></IconButton>
                 <Box sx={{ transform: "scale(1.6)" }}>{selectedService.icon}</Box>
               </Box>
-              <DialogTitle sx={{ fontWeight: 900, fontFamily: FONT, pb: 0.5 }}>{selectedService.title}</DialogTitle>
+              <DialogTitle sx={{ fontWeight: 800, fontFamily: HEAD, color: C.forest, pb: 0.5 }}>{selectedService.title}</DialogTitle>
               <DialogContent>
                 <Box sx={{ display: "flex", alignItems: "center", gap: 0.8, mb: 1.5 }}>
                   <Stars value={selectedService.rating || liveStats.averageRating} size={15} />
                   <Typography sx={{ fontSize: 13, fontWeight: 700 }}>{selectedService.rating || liveStats.averageRating}</Typography>
                 </Box>
-                <Typography sx={{ color: C.muted, fontSize: 14.5, lineHeight: 1.65, mb: 2, fontFamily: FONT }}>{selectedService.description}</Typography>
-                <Stack spacing={0.8}>
+                <Typography sx={{ color: C.muted, fontSize: 14.5, lineHeight: 1.7, mb: 2, fontFamily: FONT }}>{selectedService.description}</Typography>
+                <Stack spacing={1}>
                   {["Aadhaar verified professionals", "Arrives within 60 minutes", "Up to 90-day warranty"].map((t) => (
-                    <Box key={t} sx={{ display: "flex", alignItems: "center", gap: 1, fontSize: 14, fontWeight: 600, fontFamily: FONT }}><ShieldCheck size={16} color={C.green} /> {t}</Box>
+                    <Box key={t} sx={{ display: "flex", alignItems: "center", gap: 1.2, fontSize: 14, fontWeight: 600, fontFamily: FONT }}><LimeBadge size={24}><ShieldCheck size={14} /></LimeBadge> {t}</Box>
                   ))}
-                  {selectedService.price && <Box sx={{ fontSize: 15, fontWeight: 800, mt: 0.5, fontFamily: FONT }}>Starting ₹{selectedService.price}</Box>}
+                  {selectedService.price && <Box sx={{ fontSize: 16, fontWeight: 700, mt: 0.5, fontFamily: HEAD }}>Starting ₹{selectedService.price}</Box>}
                 </Stack>
               </DialogContent>
               <DialogActions sx={{ p: 2.5, pt: 1 }}>
@@ -995,25 +1137,25 @@ export default function HomePage() {
 
         {/* ───────── Exit intent dialog ───────── */}
         <Dialog open={showExitIntent && !isAuthenticated} onClose={() => setShowExitIntent(false)} maxWidth="xs" fullWidth PaperProps={{ sx: { borderRadius: "24px", overflow: "hidden" } }}>
-          <Box sx={{ height: 6, background: `linear-gradient(90deg, ${C.yellow}, ${C.teal})` }} />
-          <DialogTitle sx={{ fontWeight: 900, fontFamily: FONT, fontSize: 21 }}>Get ₹100 off – today only! 🎉</DialogTitle>
+          <Box sx={{ height: 6, background: `linear-gradient(90deg, ${C.forest}, ${C.lime})` }} />
+          <DialogTitle sx={{ fontWeight: 800, fontFamily: HEAD, color: C.forest, fontSize: 22 }}>Get ₹100 off – today only! 🎉</DialogTitle>
           <DialogContent>
-            <Typography sx={{ color: C.muted, fontSize: 14, mb: 2, fontFamily: FONT, lineHeight: 1.55 }}>Enter email, get offer instantly. Secure, no spam. Support: {CONTACT.EMAIL}</Typography>
+            <Typography sx={{ color: C.muted, fontSize: 14, mb: 2, fontFamily: FONT, lineHeight: 1.6 }}>Enter email, get offer instantly. Secure, no spam. Support: {CONTACT.EMAIL}</Typography>
             <TextField fullWidth autoFocus type="email" label="Email address" value={exitEmail} onChange={(e) => setExitEmail(sanitize(e.target.value))} inputProps={{ maxLength: 100 }} onKeyDown={(e) => { if (e.key === "Enter") handleNewsletter(); }} sx={{ mt: 0.5, ...fieldSx }} />
           </DialogContent>
           <DialogActions sx={{ p: 2.5, pt: 1 }}>
             <SoftButton onClick={() => setShowExitIntent(false)}>No thanks</SoftButton>
-            <PrimaryButton onClick={handleNewsletter} disabled={exitIntentSubmitting || !isValidEmail(exitEmail)}>{exitIntentSubmitting ? <CircularProgress size={20} /> : "Send my offer"}</PrimaryButton>
+            <PrimaryButton onClick={handleNewsletter} disabled={exitIntentSubmitting || !isValidEmail(exitEmail)}>{exitIntentSubmitting ? <CircularProgress size={20} sx={{ color: C.forest }} /> : "Send my offer"}</PrimaryButton>
           </DialogActions>
         </Dialog>
 
         {/* ───────── Location dialog ───────── */}
         <Dialog open={showLocationDialog} onClose={() => setShowLocationDialog(false)} maxWidth="xs" fullWidth PaperProps={{ sx: { borderRadius: "24px", overflow: "hidden" } }}>
-          <Box sx={{ height: 6, background: `linear-gradient(90deg, ${C.yellow}, ${C.teal})` }} />
-          <DialogTitle sx={{ fontWeight: 800, fontFamily: FONT }}>Choose location 📍</DialogTitle>
+          <Box sx={{ height: 6, background: `linear-gradient(90deg, ${C.forest}, ${C.lime})` }} />
+          <DialogTitle sx={{ fontWeight: 800, fontFamily: HEAD, color: C.forest }}>Choose location 📍</DialogTitle>
           <DialogContent>
             <Typography sx={{ color: C.muted, fontSize: 14, mb: 2.5, fontFamily: FONT }}>We show pros & response times for your area.</Typography>
-            <SoftButton fullWidth onClick={detectLocation} disabled={loadingLocation} startIcon={loadingLocation ? <CircularProgress size={16} /> : <LocateFixed size={18} />} sx={{ mb: 2.5, py: 1.2 }}>
+            <SoftButton fullWidth onClick={detectLocation} disabled={loadingLocation} startIcon={loadingLocation ? <CircularProgress size={16} sx={{ color: C.forest }} /> : <LocateFixed size={18} />} sx={{ mb: 2.5, py: 1.2 }}>
               {loadingLocation ? "Detecting…" : "Use current location"}
             </SoftButton>
             <TextField fullWidth label="City or area" placeholder="e.g. Pune, Kothrud" value={manualLocation} onChange={(e) => setManualLocation(sanitizeTyping(e.target.value))} inputProps={{ maxLength: 100 }} onKeyDown={(e) => { if (e.key === "Enter") handleLocationConfirm(); }} sx={fieldSx} />

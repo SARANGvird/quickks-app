@@ -5,7 +5,7 @@ import { styled } from "@mui/material/styles";
 import { Mail, Phone, MapPin, Send, ArrowUp, Truck, Clock, CheckCircle2, Star, Lock, Zap, ShieldCheck, BadgeCheck } from "lucide-react";
 import { FaFacebook, FaXTwitter, FaInstagram, FaLinkedin, FaYoutube, FaWhatsapp } from "react-icons/fa6";
 import api from "../api/api";
-import quickksLogo from "../assets/image.png";
+import quickksLogo from "../assets/quickks-logo.png";
 
 const CONTACT = {
   EMAIL: "connect@quickks.in",
